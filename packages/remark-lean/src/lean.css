@@ -1,0 +1,64 @@
+/* Lean 4 Semantic Highlighting Styles (One Dark theme inspired) */
+
+pre code.language-lean {
+  font-family: 'Fira Code', 'JetBrains Mono', monospace;
+  font-size: 0.95rem;
+  line-height: 1.6;
+  color: #abb2bf;
+  background-color: #282c34;
+  padding: 1.25rem;
+  border-radius: 12px;
+  display: block;
+  overflow-x: auto;
+  border: 1px solid #3e4451;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+}
+
+.lean-keyword {
+  color: #c678dd;
+  font-weight: bold;
+}
+
+.lean-variable {
+  color: #e06c75;
+}
+
+.lean-property {
+  color: #e5c07b;
+}
+
+.lean-function, .lean-method {
+  color: #61afef;
+}
+
+.lean-namespace {
+  color: #e5c07b;
+}
+
+.lean-type, .lean-class, .lean-struct, .lean-interface {
+  color: #56b6c2;
+  font-weight: 500;
+}
+
+.lean-string {
+  color: #98c379;
+}
+
+.lean-number {
+  color: #d19a66;
+}
+
+.lean-comment {
+  color: #7f848e;
+  font-style: italic;
+}
+
+.lean-operator {
+  color: #56b6c2;
+}
+
+.lean-leanSorryLike {
+  color: #ff6b6b;
+  text-decoration: underline dashed;
+  font-weight: bold;
+}

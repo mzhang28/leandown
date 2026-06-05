@@ -1,12 +1,16 @@
 {
   "name": "example-basic",
   "type": "module",
+  "scripts": {
+    "dev": "bun index.ts"
+  },
   "dependencies": {
     "remark": "^15.0.1",
     "remark-html": "^16.0.1",
     "remark-lean": "workspace:*"
   },
   "devDependencies": {
-    "@types/node": "latest"
+    "@types/node": "latest",
+    "vite": "latest"
   }
 }
