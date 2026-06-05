@@ -43,7 +43,7 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 PKG_DIR="$REPO_ROOT/packages/remark-lean"
 
 echo -e "\n${BOLD}═══════════════════════════════════════════════${RESET}"
-echo -e "${BOLD}   remark-lean — npm publish preparation${RESET}"
+echo -e "${BOLD}   remark-lean — bun publish preparation${RESET}"
 echo -e "${BOLD}═══════════════════════════════════════════════${RESET}\n"
 
 # ── 1. Git checks ─────────────────────────────────────────────────────────────
@@ -74,8 +74,8 @@ else
 fi
 
 # ── 2. Read current version ────────────────────────────────────────────────────
-PKG_VERSION="$(node -p "require('$PKG_DIR/package.json').version")"
-PKG_NAME="$(node    -p "require('$PKG_DIR/package.json').name")"
+PKG_VERSION="$(bun -p "require('$PKG_DIR/package.json').version")"
+PKG_NAME="$(bun    -p "require('$PKG_DIR/package.json').name")"
 info "Package: ${BOLD}${PKG_NAME}@${PKG_VERSION}${RESET}"
 
 # ── 3. Install dependencies ────────────────────────────────────────────────────
@@ -114,9 +114,9 @@ fi
 success "All expected dist files present."
 
 # ── 6. Dry-run publish ─────────────────────────────────────────────────────────
-info "Running npm publish --dry-run to preview upload…"
+info "Running bun publish --dry-run to preview upload…"
 echo ""
-(cd "$PKG_DIR" && npm publish --dry-run --access public 2>&1)
+(cd "$PKG_DIR" && bun publish --dry-run --access public 2>&1)
 echo ""
 
 # ── 7. Confirm & publish ───────────────────────────────────────────────────────
@@ -127,12 +127,12 @@ if [ "$DRY_RUN" = true ]; then
   exit 0
 fi
 
-echo -e "${BOLD}Ready to publish ${PKG_NAME}@${PKG_VERSION} to npm.${RESET}"
+echo -e "${BOLD}Ready to publish ${PKG_NAME}@${PKG_VERSION} to bun.${RESET}"
 read -r -p "$(echo -e "${YELLOW}Publish now?${RESET} [y/N] ")" PUBLISH_CONFIRM
 
 if [[ "$PUBLISH_CONFIRM" =~ ^[Yy]$ ]]; then
   info "Publishing…"
-  (cd "$PKG_DIR" && npm publish --access public)
+  (cd "$PKG_DIR" && bun publish --access public)
   success "Published ${PKG_NAME}@${PKG_VERSION} 🎉"
 else
   warn "Aborted. No package was published."
