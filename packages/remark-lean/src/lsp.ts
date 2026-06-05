@@ -271,7 +271,7 @@ export class LeanLSPClient {
         const rawHover = extractHoverText(hoverRes);
         if (rawHover) {
           const compiled = await remark().use(remarkHtml).process(rawHover);
-          m.hoverText = addTargetBlank(String(compiled));
+          m.hoverText = addTargetBlank(String(compiled).trim());
         } else {
           m.hoverText = "";
         }
@@ -410,7 +410,7 @@ export class LeanLSPClient {
             const rawGoal = goalRes.result.rendered || "";
             if (rawGoal) {
               const compiled = await remark().use(remarkHtml).process(rawGoal);
-              const targetBlankHtml = addTargetBlank(String(compiled));
+              const targetBlankHtml = addTargetBlank(String(compiled).trim());
               const finalHtml = highlightGoalHtml(targetBlankHtml, this.currentWordMap);
               goalsList.push({
                 character: pos,

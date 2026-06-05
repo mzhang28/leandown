@@ -36,6 +36,7 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 verso
 verso-website
 FEATURES.md
+AUDIT.md
 
 # Playwright test outputs
 test-results/
