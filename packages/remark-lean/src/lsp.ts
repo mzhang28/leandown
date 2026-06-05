@@ -337,32 +337,128 @@ export class LeanLSPClient {
     }
 
     const lines = content.split("\n");
+    interface GoalPosition {
+      character: number;
+      compiledHtml: string;
+    }
+    const lineGoals = new Map<number, GoalPosition[]>();
+    if (options.synchronizedHovers) {
+      for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
+        const lineText = lines[lineIndex] || "";
+        if (!lineText.trim()) continue;
+
+        // Find all query positions for this line
+        let cleanText = lineText;
+        const commentIndex = cleanText.indexOf("--");
+        if (commentIndex !== -1) {
+          cleanText = cleanText.substring(0, commentIndex);
+        }
+        cleanText = cleanText.trimEnd();
+
+        const positions: number[] = [];
+        const regex = /<;>|;/g;
+        let match;
+        while ((match = regex.exec(cleanText)) !== null) {
+          let pos = match.index;
+          while (pos > 0 && /\s/.test(cleanText[pos - 1]!)) {
+            pos--;
+          }
+          if (pos > 0 && !positions.includes(pos)) {
+            positions.push(pos);
+          }
+        }
+
+        if (!cleanText.endsWith("<;>") && !cleanText.endsWith(";")) {
+          positions.push(cleanText.length);
+        }
+
+        const goalsList: GoalPosition[] = [];
+        for (const pos of positions) {
+          const goalRes = await this.sendRequest("$/lean/plainGoal", {
+            textDocument: { uri: this.tempFileUri },
+            position: { line: lineIndex + prependLines, character: pos }
+          });
+
+          if (goalRes && goalRes.result) {
+            const rawGoal = goalRes.result.rendered || "";
+            if (rawGoal) {
+              const compiled = await remark().use(remarkHtml).process(rawGoal);
+              goalsList.push({
+                character: pos,
+                compiledHtml: String(compiled)
+              });
+            }
+          }
+        }
+
+        if (goalsList.length > 0) {
+          lineGoals.set(lineIndex, goalsList);
+        }
+      }
+    }
+
     const highlightedLines = lines.map((lineText, lineIndex) => {
       const lineTokens = tokens
         .filter((t) => t.line === lineIndex)
         .sort((a, b) => a.start - b.start);
 
+      const events: { index: number; type: 'token' | 'goal'; data: any }[] = [];
+
+      for (const token of lineTokens) {
+        events.push({ index: token.start, type: 'token', data: token });
+      }
+
+      const goals = lineGoals.get(lineIndex) || [];
+      for (const goal of goals) {
+        events.push({ index: goal.character, type: 'goal', data: goal });
+      }
+
+      // Sort events by index. If index is equal, 'goal' comes before 'token'
+      events.sort((a, b) => {
+        if (a.index !== b.index) {
+          return a.index - b.index;
+        }
+        if (a.type === 'goal' && b.type === 'token') return -1;
+        if (a.type === 'token' && b.type === 'goal') return 1;
+        return 0;
+      });
+
       let html = "";
       let lastIndex = 0;
-      for (const token of lineTokens) {
-        if (token.start < lastIndex) continue;
-        html += escapeHtml(lineText.substring(lastIndex, token.start));
-        const tokenText = lineText.substring(token.start, token.start + token.length);
-        
-        let dataAttr = "";
-        if (options.synchronizedHovers) {
-          if (token.groupId) {
-            dataAttr += ` data-symbol="${token.groupId}"`;
-          }
-          if (token.hoverText) {
-            dataAttr += ` data-hover="${escapeHtml(token.hoverText)}"`;
-          }
+
+      for (const event of events) {
+        if (event.index > lastIndex) {
+          html += escapeHtml(lineText.substring(lastIndex, event.index));
+          lastIndex = event.index;
         }
-        
-        html += `<span class="lean-${token.type}"${dataAttr}>${escapeHtml(tokenText)}</span>`;
-        lastIndex = token.start + token.length;
+
+        if (event.type === 'token') {
+          const token = event.data;
+          if (token.start < lastIndex) continue;
+
+          const tokenText = lineText.substring(token.start, token.start + token.length);
+          let dataAttr = "";
+          if (options.synchronizedHovers) {
+            if (token.groupId) {
+              dataAttr += ` data-symbol="${token.groupId}"`;
+            }
+            if (token.hoverText) {
+              dataAttr += ` data-hover="${escapeHtml(token.hoverText)}"`;
+            }
+          }
+
+          html += `<span class="lean-${token.type}"${dataAttr}>${escapeHtml(tokenText)}</span>`;
+          lastIndex = token.start + token.length;
+        } else if (event.type === 'goal') {
+          const goal = event.data;
+          html += `<span class="lean-goal-marker" data-hover="${escapeHtml(goal.compiledHtml)}">⊢</span>`;
+        }
       }
-      html += escapeHtml(lineText.substring(lastIndex));
+
+      if (lastIndex < lineText.length) {
+        html += escapeHtml(lineText.substring(lastIndex));
+      }
+
       return html;
     });
 

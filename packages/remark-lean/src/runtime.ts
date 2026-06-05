@@ -23,8 +23,29 @@ export function leanHydrate(options: SetupOptions = {}) {
     document.body.appendChild(tooltip);
   }
 
+  let isMouseInHover = false;
+  let isMouseInTooltip = false;
   let hideTimeout: ReturnType<typeof setTimeout> | null = null;
   let activeHoverElement: HTMLElement | null = null;
+
+  function updateTooltipState() {
+    if (isMouseInHover || isMouseInTooltip) {
+      if (hideTimeout) {
+        clearTimeout(hideTimeout);
+        hideTimeout = null;
+      }
+    } else {
+      if (!hideTimeout) {
+        hideTimeout = setTimeout(() => {
+          if (tooltip) {
+            tooltip.style.visibility = "hidden";
+          }
+          activeHoverElement = null;
+          hideTimeout = null;
+        }, 250);
+      }
+    }
+  }
 
   function showTooltip(hoverElement: HTMLElement) {
     if (!tooltip) return;
@@ -32,41 +53,30 @@ export function leanHydrate(options: SetupOptions = {}) {
     if (!hoverText) return;
 
     tooltip.innerHTML = hoverText;
-    tooltip.style.visibility = "visible";
     activeHoverElement = hoverElement;
 
     computePosition(hoverElement, tooltip, {
       placement: "top",
-      middleware: [offset(8), flip(), shift({ padding: 5 })]
+      middleware: [offset(4), flip(), shift({ padding: 5 })]
     }).then(({ x, y }) => {
-      if (tooltip) {
+      if (tooltip && activeHoverElement === hoverElement) {
         Object.assign(tooltip.style, {
           left: `${x}px`,
-          top: `${y}px`
+          top: `${y}px`,
+          visibility: "visible"
         });
       }
     });
   }
 
-  function hideTooltip() {
-    if (hideTimeout) clearTimeout(hideTimeout);
-    hideTimeout = setTimeout(() => {
-      if (tooltip) {
-        tooltip.style.visibility = "hidden";
-      }
-      activeHoverElement = null;
-    }, 150);
-  }
-
   if (tooltip) {
     tooltip.addEventListener("mouseenter", () => {
-      if (hideTimeout) {
-        clearTimeout(hideTimeout);
-        hideTimeout = null;
-      }
+      isMouseInTooltip = true;
+      updateTooltipState();
     });
     tooltip.addEventListener("mouseleave", () => {
-      hideTooltip();
+      isMouseInTooltip = false;
+      updateTooltipState();
     });
   }
 
@@ -85,30 +95,36 @@ export function leanHydrate(options: SetupOptions = {}) {
     }
 
     if (hover) {
-      if (hideTimeout) {
-        clearTimeout(hideTimeout);
-        hideTimeout = null;
-      }
+      isMouseInHover = true;
       showTooltip(hover);
+      updateTooltipState();
     }
   });
 
   document.addEventListener("mouseout", (e) => {
     const target = e.target as HTMLElement | null;
+    const relatedTarget = e.relatedTarget as HTMLElement | null;
     const symbol = target?.closest("[data-symbol]");
     const hover = target?.closest("[data-hover]");
 
     if (symbol) {
       const symbolValue = symbol.getAttribute("data-symbol");
-      if (symbolValue) {
-        document.querySelectorAll(`[data-symbol="${CSS.escape(symbolValue)}"]`).forEach((el) => {
-          el.classList.remove(hoveredClass);
-        });
+      const relatedSymbol = relatedTarget?.closest("[data-symbol]");
+      if (!relatedSymbol || relatedSymbol.getAttribute("data-symbol") !== symbolValue) {
+        if (symbolValue) {
+          document.querySelectorAll(`[data-symbol="${CSS.escape(symbolValue)}"]`).forEach((el) => {
+            el.classList.remove(hoveredClass);
+          });
+        }
       }
     }
 
     if (hover) {
-      hideTooltip();
+      const relatedHover = relatedTarget?.closest("[data-hover]");
+      if (relatedHover !== hover) {
+        isMouseInHover = false;
+        updateTooltipState();
+      }
     }
   });
 }

@@ -158,4 +158,22 @@ pre code.language-lean {
   color: inherit;
 }
 
+/* Goal Turnstile Marker styling */
+.lean-goal-marker {
+  display: inline-block;
+  margin-left: 10px;
+  color: #56b6c2;
+  font-weight: bold;
+  cursor: pointer;
+  opacity: 0.5;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+  user-select: none;
+}
+
+.lean-goal-marker:hover {
+  opacity: 1;
+  color: #61afef;
+  transform: scale(1.2);
+}
+
 
