@@ -62,3 +62,17 @@ pre code.language-lean {
   text-decoration: underline dashed;
   font-weight: bold;
 }
+
+/* Synchronized Hover Styling */
+[data-symbol] {
+  transition: background-color 0.15s ease, text-shadow 0.15s ease;
+  cursor: pointer;
+}
+
+.lean-hovered {
+  background-color: rgba(97, 175, 239, 0.25);
+  border-radius: 3px;
+  text-shadow: 0 0 8px rgba(97, 175, 239, 0.5);
+  text-decoration: underline;
+}
+

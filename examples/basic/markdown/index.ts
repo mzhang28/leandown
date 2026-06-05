@@ -14,7 +14,6 @@ async function startServer() {
   const server = await createServer({
     server: {
       port: 5173,
-      strictPort: true,
       host: "0.0.0.0",
       allowedHosts: ["ephemeral"]
     },
@@ -29,7 +28,7 @@ async function startServer() {
                 const markdownPath = resolve(__dirname, "example.md");
                 const markdown = await readFile(markdownPath, "utf8");
                 const htmlContent = await remark()
-                  .use(remarkLean, { rootUri })
+                  .use(remarkLean, { rootUri, synchronizedHovers: true })
                   .use(remarkHtml, { sanitize: false })
                   .process(markdown);
 

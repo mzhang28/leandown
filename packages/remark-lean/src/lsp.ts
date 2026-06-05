@@ -6,6 +6,7 @@ export interface Token {
   start: number;
   length: number;
   type: string;
+  groupId?: string;
 }
 
 export class LeanLSPClient {
@@ -16,12 +17,14 @@ export class LeanLSPClient {
   private compileWaiters = new Map<string, () => void>();
   private legend: string[] = [];
   private cwd: string;
-  private nextFileId = 1;
+  private tempFileUri: string;
 
   constructor(private rootUri: string) {
     this.cwd = rootUri.startsWith("file://")
       ? fileURLToPath(rootUri)
       : rootUri;
+    const fileId = Math.random().toString(36).substring(7);
+    this.tempFileUri = `${this.rootUri}/__temp_remark_lean_${fileId}__.lean`;
   }
 
   async start(): Promise<void> {
@@ -60,33 +63,37 @@ export class LeanLSPClient {
     this.sendNotification("initialized", {});
   }
 
-  async highlight(content: string): Promise<string> {
+  async highlight(
+    content: string,
+    options: { synchronizedHovers?: boolean; prependCode?: string } = {}
+  ): Promise<string> {
     if (!this.proc) {
       await this.start();
     }
 
-    const tempFileUri = `${this.rootUri}/__temp_remark_lean_${this.nextFileId++}__.lean`;
+    let prependCode = options.prependCode || "";
+    if (prependCode && !prependCode.endsWith("\n")) {
+      prependCode += "\n";
+    }
+    const prependLines = (prependCode.match(/\n/g) || []).length;
+    const fullContent = prependCode + content;
 
     this.sendNotification("textDocument/didOpen", {
       textDocument: {
-        uri: tempFileUri,
+        uri: this.tempFileUri,
         languageId: "lean",
         version: 1,
-        text: content
+        text: fullContent
       }
     });
 
     await Promise.race([
-      new Promise<void>((resolve) => this.compileWaiters.set(tempFileUri, resolve)),
+      new Promise<void>((resolve) => this.compileWaiters.set(this.tempFileUri, resolve)),
       new Promise<void>((resolve) => setTimeout(resolve, 1500))
     ]);
 
     const tokensRes = await this.sendRequest("textDocument/semanticTokens/full", {
-      textDocument: { uri: tempFileUri }
-    });
-
-    this.sendNotification("textDocument/didClose", {
-      textDocument: { uri: tempFileUri }
+      textDocument: { uri: this.tempFileUri }
     });
 
     const data: number[] = tokensRes.result?.data || [];
@@ -108,12 +115,72 @@ export class LeanLSPClient {
       }
 
       const type = this.legend[tokenTypeIndex] || "variable";
-      tokens.push({
-        line: currentLine,
-        start: currentCol,
-        length,
-        type
-      });
+      if (currentLine >= prependLines) {
+        tokens.push({
+          line: currentLine - prependLines,
+          start: currentCol,
+          length,
+          type
+        });
+      }
+    }
+
+    if (options.synchronizedHovers) {
+      const tempFileName = this.tempFileUri.split("/").pop();
+      const skipTypes = new Set(["keyword", "comment", "string", "number", "regexp", "operator", "modifier", "event", "leanSorryLike"]);
+      const regex = /[a-zA-Z_α-ωΑ-Ω][a-zA-Z0-9_α-ωΑ-Ω']*/g;
+      const lines = content.split("\n");
+
+      for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
+        const lineText = lines[lineIndex] || "";
+        let match;
+        regex.lastIndex = 0;
+        
+        while ((match = regex.exec(lineText)) !== null) {
+          const word = match[0];
+          const startChar = match.index;
+          const length = word.length;
+
+          // Check if there is an existing token at this position
+          const existingToken = tokens.find(t => t.line === lineIndex && t.start === startChar);
+          if (existingToken && skipTypes.has(existingToken.type)) {
+            continue;
+          }
+
+          const defRes = await this.sendRequest("textDocument/definition", {
+            textDocument: { uri: this.tempFileUri },
+            position: { line: lineIndex + prependLines, character: startChar }
+          });
+
+          const defs: any[] = Array.isArray(defRes.result) 
+            ? defRes.result 
+            : (defRes.result ? [defRes.result] : []);
+
+          if (defs.length > 0) {
+            const def = defs[0];
+            const uri = def.targetUri || def.uri;
+            const range = def.targetSelectionRange || def.targetRange || def.range;
+            
+            if (uri && range && tempFileName && uri.endsWith(tempFileName)) {
+              const defLine = range.start.line;
+              const defChar = range.start.character;
+              const groupId = `ref-${defLine}-${defChar}`;
+
+              if (existingToken) {
+                existingToken.groupId = groupId;
+              } else {
+                tokens.push({
+                  line: lineIndex,
+                  start: startChar,
+                  length,
+                  type: "variable",
+                  groupId
+                });
+              }
+            }
+          }
+        }
+      }
     }
 
     const lines = content.split("\n");
@@ -128,11 +195,21 @@ export class LeanLSPClient {
         if (token.start < lastIndex) continue;
         html += escapeHtml(lineText.substring(lastIndex, token.start));
         const tokenText = lineText.substring(token.start, token.start + token.length);
-        html += `<span class="lean-${token.type}">${escapeHtml(tokenText)}</span>`;
+        
+        let dataAttr = "";
+        if (options.synchronizedHovers && token.groupId) {
+          dataAttr = ` data-symbol="${token.groupId}"`;
+        }
+        
+        html += `<span class="lean-${token.type}"${dataAttr}>${escapeHtml(tokenText)}</span>`;
         lastIndex = token.start + token.length;
       }
       html += escapeHtml(lineText.substring(lastIndex));
       return html;
+    });
+
+    this.sendNotification("textDocument/didClose", {
+      textDocument: { uri: this.tempFileUri }
     });
 
     return highlightedLines.join("\n");
