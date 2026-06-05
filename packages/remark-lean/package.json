@@ -14,7 +14,8 @@
     "./runtime": {
       "import": "./dist/runtime.js",
       "types": "./dist/runtime.d.ts"
-    }
+    },
+    "./lean.css": "./dist/lean.css"
   },
   "files": [
     "dist"
