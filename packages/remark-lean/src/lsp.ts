@@ -21,6 +21,7 @@ export class LeanLSPClient {
   private legend: string[] = [];
   private cwd: string;
   private tempFileUri: string;
+  private currentWordMap = new Map<string, { type: string; groupId?: string; hoverText?: string }>();
 
   constructor(private rootUri: string) {
     this.cwd = rootUri.startsWith("file://")
@@ -270,7 +271,7 @@ export class LeanLSPClient {
         const rawHover = extractHoverText(hoverRes);
         if (rawHover) {
           const compiled = await remark().use(remarkHtml).process(rawHover);
-          m.hoverText = String(compiled);
+          m.hoverText = addTargetBlank(String(compiled));
         } else {
           m.hoverText = "";
         }
@@ -334,6 +335,32 @@ export class LeanLSPClient {
           }
         }
       }
+
+      // Build wordMap for identifier tracking
+      const wordMap = new Map<string, { type: string; groupId?: string; hoverText?: string }>();
+      for (const m of matches) {
+        const tok = m.existingToken || tokens.find(t => t.line === m.lineIndex && t.start === m.startChar);
+        const type = tok?.type || "variable";
+        const groupId = tok?.groupId;
+        const hoverText = tok?.hoverText;
+
+        if (!wordMap.has(m.word) || (hoverText && !wordMap.get(m.word)?.hoverText)) {
+          wordMap.set(m.word, { type, groupId, hoverText });
+        }
+      }
+
+      // Highlight identifier words inside the hover text of each match
+      for (const m of matches) {
+        if (m.hoverText) {
+          m.hoverText = highlightGoalHtml(m.hoverText, wordMap);
+        }
+        const tok = m.existingToken || tokens.find(t => t.line === m.lineIndex && t.start === m.startChar);
+        if (tok && m.hoverText) {
+          tok.hoverText = m.hoverText;
+        }
+      }
+
+      this.currentWordMap = wordMap;
     }
 
     const lines = content.split("\n");
@@ -383,9 +410,11 @@ export class LeanLSPClient {
             const rawGoal = goalRes.result.rendered || "";
             if (rawGoal) {
               const compiled = await remark().use(remarkHtml).process(rawGoal);
+              const targetBlankHtml = addTargetBlank(String(compiled));
+              const finalHtml = highlightGoalHtml(targetBlankHtml, this.currentWordMap);
               goalsList.push({
                 character: pos,
-                compiledHtml: String(compiled)
+                compiledHtml: finalHtml
               });
             }
           }
@@ -579,4 +608,43 @@ function extractHoverText(hoverRes: any): string {
     }
   }
   return "";
+}
+
+function addTargetBlank(html: string): string {
+  return html.replace(/<a\b([^>]*)/gi, (match, p1) => {
+    if (/target\s*=/i.test(p1)) {
+      return match;
+    }
+    return `<a${p1} target="_blank" rel="noopener noreferrer"`;
+  });
+}
+
+function highlightGoalHtml(
+  html: string,
+  wordMap: Map<string, { type: string; groupId?: string; hoverText?: string }>
+): string {
+  const codeBlockRegex = /<code class="language-lean">([\s\S]*?)<\/code>/g;
+
+  return html.replace(codeBlockRegex, (match, codeText) => {
+    const entityOrIdentRegex = /&[a-zA-Z0-9#]+;|([a-zA-Z_α-ωΑ-Ω][a-zA-Z0-9_α-ωΑ-Ω']*)/g;
+    
+    const highlightedCode = codeText.replace(entityOrIdentRegex, (m: string, word: string | undefined) => {
+      if (!word) return m; // It was an HTML entity, keep it unchanged
+      
+      const info = wordMap.get(word);
+      if (info) {
+        let dataAttr = "";
+        if (info.groupId) {
+          dataAttr += ` data-symbol="${info.groupId}"`;
+        }
+        if (info.hoverText) {
+          dataAttr += ` data-hover="${escapeHtml(info.hoverText)}"`;
+        }
+        return `<span class="lean-${info.type}"${dataAttr}>${word}</span>`;
+      }
+      return word;
+    });
+
+    return `<code class="language-lean">${highlightedCode}</code>`;
+  });
 }

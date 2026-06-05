@@ -9,10 +9,58 @@ export function leanHydrate(options: SetupOptions = {}) {
   const hoveredClass = options.hoveredClass || "lean-hovered";
   const tooltipClass = options.tooltipClass || "lean-tooltip";
 
-  // Create shared tooltip element if it doesn't exist
-  let tooltip = document.querySelector(`.${tooltipClass}`) as HTMLElement | null;
-  if (!tooltip) {
-    tooltip = document.createElement("div");
+  interface TooltipController {
+    element: HTMLElement;
+    tooltip: HTMLElement;
+    isHovered: boolean;
+    hideTimeout: ReturnType<typeof setTimeout> | null;
+    close: () => void;
+  }
+  let activeTooltips: TooltipController[] = [];
+
+  function isControllerActive(c: TooltipController): boolean {
+    if (c.isHovered) return true;
+    return activeTooltips.some(child => {
+      if (child === c) return false;
+      if (c.tooltip.contains(child.element)) {
+        return isControllerActive(child);
+      }
+      return false;
+    });
+  }
+
+  function updateTooltips() {
+    for (const c of activeTooltips) {
+      const active = isControllerActive(c);
+      if (active) {
+        if (c.hideTimeout) {
+          clearTimeout(c.hideTimeout);
+          c.hideTimeout = null;
+        }
+      } else {
+        if (!c.hideTimeout) {
+          c.hideTimeout = setTimeout(() => {
+            c.close();
+            updateTooltips();
+          }, 250);
+        }
+      }
+    }
+  }
+
+  function createTooltipFor(el: HTMLElement) {
+    if (el.dataset.hasTooltip === "true") return;
+    el.dataset.hasTooltip = "true";
+
+    const parentTooltipElement = el.closest(`.${tooltipClass}`) as HTMLElement | null;
+    
+    if (!parentTooltipElement) {
+      // Close all top-level tooltips
+      [...activeTooltips].forEach(c => c.close());
+      activeTooltips = [];
+    }
+
+    const tooltip = document.createElement("div");
     tooltip.className = tooltipClass;
     Object.assign(tooltip.style, {
       position: "absolute",
@@ -20,63 +68,68 @@ export function leanHydrate(options: SetupOptions = {}) {
       left: "0",
       visibility: "hidden"
     });
+    tooltip.innerHTML = el.getAttribute("data-hover") || "";
     document.body.appendChild(tooltip);
-  }
 
-  let isMouseInHover = false;
-  let isMouseInTooltip = false;
-  let hideTimeout: ReturnType<typeof setTimeout> | null = null;
-  let activeHoverElement: HTMLElement | null = null;
+    let isMouseInHover = true;
+    let isMouseInTooltip = false;
 
-  function updateTooltipState() {
-    if (isMouseInHover || isMouseInTooltip) {
-      if (hideTimeout) {
-        clearTimeout(hideTimeout);
-        hideTimeout = null;
+    const controller: TooltipController = {
+      element: el,
+      tooltip: tooltip,
+      isHovered: true,
+      hideTimeout: null,
+      close: () => {
+        if (controller.hideTimeout) {
+          clearTimeout(controller.hideTimeout);
+          controller.hideTimeout = null;
+        }
+        tooltip.remove();
+        el.dataset.hasTooltip = "false";
+        el.removeEventListener("mouseleave", onMouseLeaveEl);
+        el.removeEventListener("mouseenter", onMouseEnterEl);
+        activeTooltips = activeTooltips.filter(c => c !== controller);
       }
-    } else {
-      if (!hideTimeout) {
-        hideTimeout = setTimeout(() => {
-          if (tooltip) {
-            tooltip.style.visibility = "hidden";
-          }
-          activeHoverElement = null;
-          hideTimeout = null;
-        }, 250);
-      }
+    };
+    activeTooltips.push(controller);
+
+    function setHoverState(hover: boolean, tooltipHover: boolean) {
+      isMouseInHover = hover;
+      isMouseInTooltip = tooltipHover;
+      controller.isHovered = isMouseInHover || isMouseInTooltip;
+      updateTooltips();
     }
-  }
 
-  function showTooltip(hoverElement: HTMLElement) {
-    if (!tooltip) return;
-    const hoverText = hoverElement.getAttribute("data-hover");
-    if (!hoverText) return;
+    function onMouseEnterEl() {
+      setHoverState(true, isMouseInTooltip);
+    }
 
-    tooltip.innerHTML = hoverText;
-    activeHoverElement = hoverElement;
+    function onMouseLeaveEl() {
+      setHoverState(false, isMouseInTooltip);
+    }
 
-    computePosition(hoverElement, tooltip, {
+    el.addEventListener("mouseenter", onMouseEnterEl);
+    el.addEventListener("mouseleave", onMouseLeaveEl);
+
+    tooltip.addEventListener("mouseenter", () => {
+      setHoverState(isMouseInHover, true);
+    });
+
+    tooltip.addEventListener("mouseleave", () => {
+      setHoverState(isMouseInHover, false);
+    });
+
+    computePosition(el, tooltip, {
       placement: "top",
       middleware: [offset(4), flip(), shift({ padding: 5 })]
     }).then(({ x, y }) => {
-      if (tooltip && activeHoverElement === hoverElement) {
+      if (activeTooltips.includes(controller)) {
         Object.assign(tooltip.style, {
           left: `${x}px`,
           top: `${y}px`,
           visibility: "visible"
         });
       }
-    });
-  }
-
-  if (tooltip) {
-    tooltip.addEventListener("mouseenter", () => {
-      isMouseInTooltip = true;
-      updateTooltipState();
-    });
-    tooltip.addEventListener("mouseleave", () => {
-      isMouseInTooltip = false;
-      updateTooltipState();
     });
   }
 
@@ -95,9 +148,7 @@ export function leanHydrate(options: SetupOptions = {}) {
     }
 
     if (hover) {
-      isMouseInHover = true;
-      showTooltip(hover);
-      updateTooltipState();
+      createTooltipFor(hover);
     }
   });
 
@@ -105,7 +156,6 @@ export function leanHydrate(options: SetupOptions = {}) {
     const target = e.target as HTMLElement | null;
     const relatedTarget = e.relatedTarget as HTMLElement | null;
     const symbol = target?.closest("[data-symbol]");
-    const hover = target?.closest("[data-hover]");
 
     if (symbol) {
       const symbolValue = symbol.getAttribute("data-symbol");
@@ -116,14 +166,6 @@ export function leanHydrate(options: SetupOptions = {}) {
             el.classList.remove(hoveredClass);
           });
         }
-      }
-    }
-
-    if (hover) {
-      const relatedHover = relatedTarget?.closest("[data-hover]");
-      if (relatedHover !== hover) {
-        isMouseInHover = false;
-        updateTooltipState();
       }
     }
   });
