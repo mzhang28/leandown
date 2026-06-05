@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "@floating-ui/dom": "^1.7.6",
+    "playwright": "^1.60.0",
     "remark": "^15.0.1",
     "remark-html": "^16.0.1"
   }
