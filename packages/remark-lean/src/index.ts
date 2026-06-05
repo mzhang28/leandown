@@ -38,34 +38,7 @@ export default function remarkLean(options: RemarkLeanOptions) {
         node.value = `<pre><code class="language-lean">${highlighted}</code></pre>`;
       }
 
-      if (hasLeanBlocks && options.synchronizedHovers) {
-        const scriptHtml = `
-<script>
-(function() {
-  document.addEventListener('mouseover', function(e) {
-    var symbol = e.target.closest('[data-symbol]');
-    if (!symbol) return;
-    var symbolValue = symbol.getAttribute('data-symbol');
-    document.querySelectorAll('[data-symbol="' + CSS.escape(symbolValue) + '"]').forEach(function(el) {
-      el.classList.add('lean-hovered');
-    });
-  });
-  document.addEventListener('mouseout', function(e) {
-    var symbol = e.target.closest('[data-symbol]');
-    if (!symbol) return;
-    var symbolValue = symbol.getAttribute('data-symbol');
-    document.querySelectorAll('[data-symbol="' + CSS.escape(symbolValue) + '"]').forEach(function(el) {
-      el.classList.remove('lean-hovered');
-    });
-  });
-})();
-</script>
-`;
-        tree.children.push({
-          type: "html",
-          value: scriptHtml
-        });
-      }
+
     } finally {
       await client.shutdown();
     }

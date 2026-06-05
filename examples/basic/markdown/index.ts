@@ -11,11 +11,14 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 async function startServer() {
   const rootUri = new URL("../lean", import.meta.url).toString();
 
+  const defaultPort = process.env.PORT ? parseInt(process.env.PORT, 10) : 5173;
+
   const server = await createServer({
     server: {
-      port: 5173,
+      port: defaultPort,
       host: "0.0.0.0",
-      allowedHosts: ["ephemeral"]
+      allowedHosts: ["ephemeral"],
+      strictPort: false
     },
     plugins: [
       {
@@ -60,7 +63,9 @@ async function startServer() {
   });
 
   await server.listen();
-  console.log("Server listening at http://localhost:5173/");
+  const address = server.httpServer?.address();
+  const port = typeof address === "object" && address !== null ? address.port : defaultPort;
+  console.log(`Server listening at http://localhost:${port}/`);
 }
 
 startServer().catch((err) => {

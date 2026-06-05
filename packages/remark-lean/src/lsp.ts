@@ -129,55 +129,187 @@ export class LeanLSPClient {
       const tempFileName = this.tempFileUri.split("/").pop();
       const skipTypes = new Set(["keyword", "comment", "string", "number", "regexp", "operator", "modifier", "event", "leanSorryLike"]);
       const regex = /[a-zA-Z_α-ωΑ-Ω][a-zA-Z0-9_α-ωΑ-Ω']*/g;
-      const lines = content.split("\n");
 
-      for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
-        const lineText = lines[lineIndex] || "";
-        let match;
-        regex.lastIndex = 0;
-        
-        while ((match = regex.exec(lineText)) !== null) {
-          const word = match[0];
-          const startChar = match.index;
-          const length = word.length;
+      // Query document symbols to find containing declarations
+      const symbolsRes = await this.sendRequest("textDocument/documentSymbol", {
+        textDocument: { uri: this.tempFileUri }
+      });
+      const symbols: any[] = symbolsRes.result || [];
 
-          // Check if there is an existing token at this position
-          const existingToken = tokens.find(t => t.line === lineIndex && t.start === startChar);
-          if (existingToken && skipTypes.has(existingToken.type)) {
-            continue;
+      interface MatchInfo {
+        word: string;
+        lineIndex: number;
+        startChar: number;
+        length: number;
+        existingToken?: Token;
+        defLine: number | null;
+        defChar: number | null;
+        defUri: string | null;
+      }
+
+      const matches: MatchInfo[] = [];
+
+      // Find skip ranges (comments, strings, char literals)
+      const skipRanges: { start: number; end: number }[] = [];
+      let skipMatch;
+
+      // Line comments
+      const lineCommentRegex = /--.*/g;
+      while ((skipMatch = lineCommentRegex.exec(content)) !== null) {
+        skipRanges.push({ start: skipMatch.index, end: skipMatch.index + skipMatch[0].length });
+      }
+
+      // Block comments
+      const blockCommentRegex = /\/-[\s\S]*?-\//g;
+      while ((skipMatch = blockCommentRegex.exec(content)) !== null) {
+        skipRanges.push({ start: skipMatch.index, end: skipMatch.index + skipMatch[0].length });
+      }
+
+      // String literals
+      const stringRegex = /"(\\.|[^"\\])*"/g;
+      while ((skipMatch = stringRegex.exec(content)) !== null) {
+        skipRanges.push({ start: skipMatch.index, end: skipMatch.index + skipMatch[0].length });
+      }
+
+      // Character literals
+      const charRegex = /'(\\.|[^'\\])'/g;
+      while ((skipMatch = charRegex.exec(content)) !== null) {
+        skipRanges.push({ start: skipMatch.index, end: skipMatch.index + skipMatch[0].length });
+      }
+
+      // Helper to convert index in content to line and character
+      const lineOffsets: number[] = [0];
+      for (let i = 0; i < content.length; i++) {
+        if (content[i] === "\n") {
+          lineOffsets.push(i + 1);
+        }
+      }
+
+      const getLineAndChar = (index: number) => {
+        let line = 0;
+        while (line + 1 < lineOffsets.length && lineOffsets[line + 1]! <= index) {
+          line++;
+        }
+        const character = index - lineOffsets[line]!;
+        return { line, character };
+      };
+
+      let match;
+      regex.lastIndex = 0;
+      while ((match = regex.exec(content)) !== null) {
+        const word = match[0];
+        const startPos = match.index;
+
+        // Check if inside any skip range
+        const isSkipped = skipRanges.some(r => startPos >= r.start && startPos < r.end);
+        if (isSkipped) {
+          continue;
+        }
+
+        const { line: lineIndex, character: startChar } = getLineAndChar(startPos);
+        const length = word.length;
+
+        // Check if there is an existing token covering this position that should be skipped
+        const coveringToken = tokens.find(t => 
+          t.line === lineIndex && 
+          startChar >= t.start && 
+          startChar < (t.start + t.length)
+        );
+        if (coveringToken && skipTypes.has(coveringToken.type)) {
+          continue;
+        }
+
+        const existingToken = tokens.find(t => t.line === lineIndex && t.start === startChar);
+
+        matches.push({
+          word,
+          lineIndex,
+          startChar,
+          length,
+          existingToken,
+          defLine: null,
+          defChar: null,
+          defUri: null
+        });
+      }
+
+      // Query definition for each match
+      for (const m of matches) {
+        const defRes = await this.sendRequest("textDocument/definition", {
+          textDocument: { uri: this.tempFileUri },
+          position: { line: m.lineIndex + prependLines, character: m.startChar }
+        });
+
+        const defs: any[] = Array.isArray(defRes.result) 
+          ? defRes.result 
+          : (defRes.result ? [defRes.result] : []);
+
+        if (defs.length > 0) {
+          const def = defs[0];
+          const uri = def.targetUri || def.uri;
+          const range = def.targetSelectionRange || def.targetRange || def.range;
+          
+          if (uri && range) {
+            m.defUri = uri;
+            m.defLine = range.start.line;
+            m.defChar = range.start.character;
           }
+        }
+      }
 
-          const defRes = await this.sendRequest("textDocument/definition", {
-            textDocument: { uri: this.tempFileUri },
-            position: { line: lineIndex + prependLines, character: startChar }
+      // Resolve groups
+      for (const m of matches) {
+        let groupId = "";
+        if (m.defLine !== null && m.defChar !== null && m.defUri !== null) {
+          if (tempFileName && m.defUri.endsWith(tempFileName)) {
+            groupId = `ref-${m.defLine}-${m.defChar}`;
+          } else {
+            const uriHash = hashString(m.defUri);
+            groupId = `ref-ext-${uriHash}-${m.defLine}-${m.defChar}`;
+          }
+        } else {
+          // Fallback to document symbol-scoped auto-implicit/implicit logic
+          const fullLine = m.lineIndex + prependLines;
+          const containingSymbol = symbols.find(sym => {
+            const start = sym.range.start.line;
+            const end = sym.range.end.line;
+            return fullLine >= start && fullLine <= end;
           });
 
-          const defs: any[] = Array.isArray(defRes.result) 
-            ? defRes.result 
-            : (defRes.result ? [defRes.result] : []);
+          // Find all candidates: same word, no definition, same containing symbol (or both null)
+          const candidates = matches.filter(o => 
+            o.word === m.word &&
+            o.defLine === null &&
+            symbols.find(sym => {
+              const start = sym.range.start.line;
+              const end = sym.range.end.line;
+              return (o.lineIndex + prependLines) >= start && (o.lineIndex + prependLines) <= end;
+            })?.name === containingSymbol?.name
+          );
 
-          if (defs.length > 0) {
-            const def = defs[0];
-            const uri = def.targetUri || def.uri;
-            const range = def.targetSelectionRange || def.targetRange || def.range;
-            
-            if (uri && range && tempFileName && uri.endsWith(tempFileName)) {
-              const defLine = range.start.line;
-              const defChar = range.start.character;
-              const groupId = `ref-${defLine}-${defChar}`;
+          // Sort candidates by position
+          candidates.sort((a, b) => {
+            if (a.lineIndex !== b.lineIndex) return a.lineIndex - b.lineIndex;
+            return a.startChar - b.startChar;
+          });
 
-              if (existingToken) {
-                existingToken.groupId = groupId;
-              } else {
-                tokens.push({
-                  line: lineIndex,
-                  start: startChar,
-                  length,
-                  type: "variable",
-                  groupId
-                });
-              }
-            }
+          const first = candidates[0];
+          if (first) {
+            groupId = `ref-${first.lineIndex + prependLines}-${first.startChar}`;
+          }
+        }
+
+        if (groupId) {
+          if (m.existingToken) {
+            m.existingToken.groupId = groupId;
+          } else {
+            tokens.push({
+              line: m.lineIndex,
+              start: m.startChar,
+              length: m.length,
+              type: "variable",
+              groupId
+            });
           }
         }
       }
@@ -296,4 +428,13 @@ function escapeHtml(str: string): string {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
+}
+
+function hashString(str: string): string {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = (hash << 5) - hash + str.charCodeAt(i);
+    hash |= 0;
+  }
+  return Math.abs(hash).toString(36);
 }
