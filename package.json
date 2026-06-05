@@ -1,3 +1,9 @@
 {
-  "workspaces": ["packages/*", "examples/*/markdown"]
+  "workspaces": ["packages/*", "examples/*/markdown"],
+  "scripts": {
+    "test:e2e": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.60.0"
+  }
 }

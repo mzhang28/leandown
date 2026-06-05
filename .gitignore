@@ -36,3 +36,9 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 verso
 verso-website
 FEATURES.md
+
+# Playwright test outputs
+test-results/
+playwright-report/
+blob-report/
+playwright/.local-browsers
