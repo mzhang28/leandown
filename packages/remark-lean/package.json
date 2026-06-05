@@ -2,6 +2,7 @@
   "name": "remark-lean",
   "version": "0.0.1",
   "description": "remark plugin for syntax-highlighting Lean 4 code blocks via the Lean LSP",
+  "repository": {"url": "https://github.com/mzhang28/remark-lean"},
   "main": "dist/index.js",
   "module": "dist/index.js",
   "types": "dist/index.d.ts",
