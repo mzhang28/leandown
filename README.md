@@ -25,6 +25,6 @@ import { leanHydrate } from "remark-lean/runtime";
 leanHydrate();
 ```
 
-Default styles are shipped in `remark-lean/src/lean.css`.
+Default styles are shipped in `remark-lean/dist/lean.css`.
 
 See examples in `examples`.

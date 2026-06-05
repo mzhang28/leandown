@@ -1,23 +1,40 @@
 {
   "name": "remark-lean",
-  "main": "src/index.ts",
-  "module": "src/index.ts",
-  "types": "src/index.ts",
+  "version": "0.1.0",
+  "description": "remark plugin for syntax-highlighting Lean 4 code blocks via the Lean LSP",
+  "main": "dist/index.js",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
   "exports": {
-    ".": "./src/index.ts",
-    "./runtime": "./src/runtime.ts"
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./runtime": {
+      "import": "./dist/runtime.js",
+      "types": "./dist/runtime.d.ts"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "bun run build:js && bun run build:dts && bun run build:css",
+    "build:js": "bun build src/index.ts src/runtime.ts --outdir dist --format esm --target node",
+    "build:dts": "tsc -p tsconfig.build.json",
+    "build:css": "cp src/lean.css dist/lean.css"
   },
   "type": "module",
-  "private": true,
   "devDependencies": {
-    "@types/node": "latest"
+    "@types/node": "latest",
+    "playwright": "^1.60.0",
+    "typescript": "^5"
   },
   "peerDependencies": {
     "typescript": "^5"
   },
   "dependencies": {
     "@floating-ui/dom": "^1.7.6",
-    "playwright": "^1.60.0",
     "remark": "^15.0.1",
     "remark-html": "^16.0.1"
   }
