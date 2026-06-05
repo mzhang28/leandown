@@ -1,5 +1,7 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { remark } from "remark";
+import remarkHtml from "remark-html";
 
 export interface Token {
   line: number;
@@ -7,6 +9,7 @@ export interface Token {
   length: number;
   type: string;
   groupId?: string;
+  hoverText?: string;
 }
 
 export class LeanLSPClient {
@@ -145,6 +148,7 @@ export class LeanLSPClient {
         defLine: number | null;
         defChar: number | null;
         defUri: string | null;
+        hoverText: string;
       }
 
       const matches: MatchInfo[] = [];
@@ -229,12 +233,14 @@ export class LeanLSPClient {
           existingToken,
           defLine: null,
           defChar: null,
-          defUri: null
+          defUri: null,
+          hoverText: ""
         });
       }
 
-      // Query definition for each match
+      // Query definition and hover for each match
       for (const m of matches) {
+        // Query definition
         const defRes = await this.sendRequest("textDocument/definition", {
           textDocument: { uri: this.tempFileUri },
           position: { line: m.lineIndex + prependLines, character: m.startChar }
@@ -254,6 +260,19 @@ export class LeanLSPClient {
             m.defLine = range.start.line;
             m.defChar = range.start.character;
           }
+        }
+
+        // Query hover
+        const hoverRes = await this.sendRequest("textDocument/hover", {
+          textDocument: { uri: this.tempFileUri },
+          position: { line: m.lineIndex + prependLines, character: m.startChar }
+        });
+        const rawHover = extractHoverText(hoverRes);
+        if (rawHover) {
+          const compiled = await remark().use(remarkHtml).process(rawHover);
+          m.hoverText = String(compiled);
+        } else {
+          m.hoverText = "";
         }
       }
 
@@ -299,16 +318,18 @@ export class LeanLSPClient {
           }
         }
 
-        if (groupId) {
+        if (groupId || m.hoverText) {
           if (m.existingToken) {
-            m.existingToken.groupId = groupId;
+            if (groupId) m.existingToken.groupId = groupId;
+            if (m.hoverText) m.existingToken.hoverText = m.hoverText;
           } else {
             tokens.push({
               line: m.lineIndex,
               start: m.startChar,
               length: m.length,
               type: "variable",
-              groupId
+              groupId,
+              hoverText: m.hoverText
             });
           }
         }
@@ -329,8 +350,13 @@ export class LeanLSPClient {
         const tokenText = lineText.substring(token.start, token.start + token.length);
         
         let dataAttr = "";
-        if (options.synchronizedHovers && token.groupId) {
-          dataAttr = ` data-symbol="${token.groupId}"`;
+        if (options.synchronizedHovers) {
+          if (token.groupId) {
+            dataAttr += ` data-symbol="${token.groupId}"`;
+          }
+          if (token.hoverText) {
+            dataAttr += ` data-hover="${escapeHtml(token.hoverText)}"`;
+          }
         }
         
         html += `<span class="lean-${token.type}"${dataAttr}>${escapeHtml(tokenText)}</span>`;
@@ -437,4 +463,24 @@ function hashString(str: string): string {
     hash |= 0;
   }
   return Math.abs(hash).toString(36);
+}
+
+function extractHoverText(hoverRes: any): string {
+  if (!hoverRes || !hoverRes.result) return "";
+  const contents = hoverRes.result.contents;
+  if (typeof contents === "string") {
+    return contents;
+  }
+  if (contents && typeof contents === "object") {
+    if ("value" in contents) {
+      return contents.value;
+    }
+    if (Array.isArray(contents)) {
+      return contents
+        .map((c) => (typeof c === "string" ? c : c.value || ""))
+        .filter(Boolean)
+        .join("\n\n");
+    }
+  }
+  return "";
 }

@@ -76,3 +76,86 @@ pre code.language-lean {
   text-decoration: underline;
 }
 
+/* Tooltip styles */
+.lean-tooltip {
+  position: absolute;
+  width: max-content;
+  max-width: 320px;
+  background-color: #181825;
+  color: #cdd6f4;
+  padding: 6px 10px;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-family: 'Fira Code', 'JetBrains Mono', monospace;
+  border: 1px solid #45475a;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  visibility: hidden;
+  pointer-events: auto;
+  z-index: 9999;
+  white-space: pre-wrap;
+  line-height: 1.4;
+}
+
+.lean-tooltip p {
+  margin: 0 0 4px 0;
+  font-size: inherit;
+  color: inherit;
+}
+
+.lean-tooltip p:last-child {
+  margin-bottom: 0;
+}
+
+.lean-tooltip pre {
+  margin: 0 0 4px 0;
+  background-color: transparent;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.lean-tooltip pre code {
+  font-family: inherit;
+  font-size: inherit;
+  color: #a6e3a1; /* Highlight type signatures in green */
+  background-color: transparent;
+  padding: 0;
+  border-radius: 0;
+  border: none;
+}
+
+.lean-tooltip code {
+  font-family: inherit;
+  font-size: inherit;
+  color: #f38ba8; /* inline code color */
+  background-color: #313244;
+  padding: 1px 3px;
+  border-radius: 3px;
+}
+
+.lean-tooltip hr {
+  margin: 6px 0;
+  border: none;
+  border-top: 1px solid #45475a;
+}
+
+.lean-tooltip ul {
+  margin: 0 0 4px 0;
+  padding-left: 16px;
+  font-size: inherit;
+  color: inherit;
+}
+
+.lean-tooltip li {
+  margin-bottom: 2px;
+  font-size: inherit;
+  color: inherit;
+}
+
+.lean-tooltip em {
+  font-size: inherit;
+  color: inherit;
+}
+
+
