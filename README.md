@@ -1,5 +1,7 @@
 # remark-lean
 
+[![npm version](https://img.shields.io/npm/v/remark-lean)](https://www.npmjs.com/package/remark-lean)
+
 A [remark](https://github.com/remarkjs/remark) plugin that provides Verso-like features.
 
 ## Quick start
