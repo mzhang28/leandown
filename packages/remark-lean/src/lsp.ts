@@ -384,7 +384,7 @@ export class LeanLSPClient {
       const events: { index: number; kind: 'start' | 'end' | 'goal'; data: any; length?: number; id?: number }[] = [];
 
       for (let i = 0; i < lineTokens.length; i++) {
-        const token = lineTokens[i];
+        const token = lineTokens[i]!;
         events.push({ index: token.start, kind: 'start', data: token, length: token.length, id: i });
         events.push({ index: token.start + token.length, kind: 'end', data: token, length: token.length, id: i });
       }
