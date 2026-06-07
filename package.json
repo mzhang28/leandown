@@ -1,5 +1,5 @@
 {
-  "workspaces": ["packages/*", "examples/basic/markdown", "examples/syntax-universe-lean"],
+  "workspaces": ["packages/*", "examples/basic/markdown"],
   "scripts": {
     "test:e2e": "playwright test"
   },
