@@ -14,25 +14,25 @@ export interface Token {
 
 export class LeanLSPClient {
   private proc: ChildProcess | null = null;
+  private initPromise: Promise<void> | null = null;
   private buffer = Buffer.alloc(0);
   private nextRequestId = 1;
   private pendingRequests = new Map<number, (res: any) => void>();
   private compileWaiters = new Map<string, () => void>();
   private legend: string[] = [];
   private cwd: string;
-  private tempFileUri: string;
   private currentWordMap = new Map<string, { type: string; groupId?: string; hoverText?: string }>();
 
   constructor(private rootUri: string) {
     this.cwd = rootUri.startsWith("file://")
       ? fileURLToPath(rootUri)
       : rootUri;
-    const fileId = Math.random().toString(36).substring(7);
-    this.tempFileUri = `${this.rootUri}/__temp_remark_lean_${fileId}__.lean`;
   }
 
-  async start(): Promise<void> {
-    this.proc = spawn("lake", ["serve"], { cwd: this.cwd });
+  start(): Promise<void> {
+    if (this.initPromise) return this.initPromise;
+    this.initPromise = (async () => {
+      this.proc = spawn("lake", ["serve"], { cwd: this.cwd });
 
     this.proc.stdout!.on("data", (chunk) => {
       this.buffer = Buffer.concat([this.buffer, chunk]);
@@ -63,8 +63,10 @@ export class LeanLSPClient {
       }
     });
 
-    this.legend = initRes.result?.capabilities?.semanticTokensProvider?.legend?.tokenTypes || [];
-    this.sendNotification("initialized", {});
+      this.legend = initRes.result?.capabilities?.semanticTokensProvider?.legend?.tokenTypes || [];
+      this.sendNotification("initialized", {});
+    })();
+    return this.initPromise;
   }
 
   async highlight(
@@ -75,6 +77,9 @@ export class LeanLSPClient {
       await this.start();
     }
 
+    const fileId = Math.random().toString(36).substring(7);
+    const tempFileUri = `${this.rootUri}/__temp_remark_lean_${fileId}__.lean`;
+
     let prependCode = options.prependCode || "";
     if (prependCode && !prependCode.endsWith("\n")) {
       prependCode += "\n";
@@ -84,7 +89,7 @@ export class LeanLSPClient {
 
     this.sendNotification("textDocument/didOpen", {
       textDocument: {
-        uri: this.tempFileUri,
+        uri: tempFileUri,
         languageId: "lean",
         version: 1,
         text: fullContent
@@ -92,12 +97,12 @@ export class LeanLSPClient {
     });
 
     await Promise.race([
-      new Promise<void>((resolve) => this.compileWaiters.set(this.tempFileUri, resolve)),
+      new Promise<void>((resolve) => this.compileWaiters.set(tempFileUri, resolve)),
       new Promise<void>((resolve) => setTimeout(resolve, 1500))
     ]);
 
     const tokensRes = await this.sendRequest("textDocument/semanticTokens/full", {
-      textDocument: { uri: this.tempFileUri }
+      textDocument: { uri: tempFileUri }
     });
 
     const data: number[] = tokensRes.result?.data || [];
@@ -132,7 +137,7 @@ export class LeanLSPClient {
     const lines = content.split("\n");
 
     if (options.synchronizedHovers) {
-      const tempFileName = this.tempFileUri.split("/").pop();
+      const tempFileName = tempFileUri.split("/").pop();
       const tokenizeRegex = /[a-zA-Z_α-ωΑ-Ω0-9']+|[^\s]/g;
 
       interface QueryToken {
@@ -163,11 +168,11 @@ export class LeanLSPClient {
         queryTokens.map(async (qt) => {
           const [defRes, hoverRes] = await Promise.all([
             this.sendRequest("textDocument/definition", {
-              textDocument: { uri: this.tempFileUri },
+              textDocument: { uri: tempFileUri },
               position: { line: qt.line + prependLines, character: qt.startChar }
             }).catch(() => null),
             this.sendRequest("textDocument/hover", {
-              textDocument: { uri: this.tempFileUri },
+              textDocument: { uri: tempFileUri },
               position: { line: qt.line + prependLines, character: qt.startChar }
             }).catch(() => null)
           ]);
@@ -349,7 +354,7 @@ export class LeanLSPClient {
         const goalsList: GoalPosition[] = [];
         for (const pos of positions) {
           const goalRes = await this.sendRequest("$/lean/plainGoal", {
-            textDocument: { uri: this.tempFileUri },
+            textDocument: { uri: tempFileUri },
             position: { line: lineIndex + prependLines, character: pos }
           });
 
@@ -444,7 +449,7 @@ export class LeanLSPClient {
     });
 
     this.sendNotification("textDocument/didClose", {
-      textDocument: { uri: this.tempFileUri }
+      textDocument: { uri: tempFileUri }
     });
 
     return highlightedLines.join("\n");
