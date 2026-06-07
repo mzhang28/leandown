@@ -1,4 +1,4 @@
-import { computePosition, flip, shift, offset } from "@floating-ui/dom";
+import { computePosition, flip, shift, offset, size } from "@floating-ui/dom";
 
 export interface SetupOptions {
   hoveredClass?: string;
@@ -121,7 +121,20 @@ export function leanHydrate(options: SetupOptions = {}) {
 
     computePosition(el, tooltip, {
       placement: "top",
-      middleware: [offset(4), flip(), shift({ padding: 5 })]
+      middleware: [
+        offset(4),
+        flip(),
+        shift({ padding: 5 }),
+        size({
+          padding: 10,
+          apply({ availableWidth, availableHeight, elements }) {
+            Object.assign(elements.floating.style, {
+              maxWidth: `${Math.min(320, availableWidth)}px`,
+              maxHeight: `${availableHeight}px`,
+            });
+          },
+        })
+      ]
     }).then(({ x, y }) => {
       if (activeTooltips.includes(controller)) {
         Object.assign(tooltip.style, {
@@ -132,6 +145,9 @@ export function leanHydrate(options: SetupOptions = {}) {
       }
     });
   }
+
+  let pendingTooltipTimeout: ReturnType<typeof setTimeout> | null = null;
+  let pendingTooltipElement: HTMLElement | null = null;
 
   document.addEventListener("mouseover", (e) => {
     const target = e.target as HTMLElement | null;
@@ -148,7 +164,22 @@ export function leanHydrate(options: SetupOptions = {}) {
     }
 
     if (hover) {
-      createTooltipFor(hover);
+      if (pendingTooltipElement !== hover && hover.dataset.hasTooltip !== "true") {
+        if (pendingTooltipTimeout) clearTimeout(pendingTooltipTimeout);
+        pendingTooltipElement = hover;
+        pendingTooltipTimeout = setTimeout(() => {
+          if (pendingTooltipElement === hover) {
+            createTooltipFor(hover);
+            pendingTooltipElement = null;
+          }
+        }, 500);
+      }
+    } else {
+      if (pendingTooltipTimeout) {
+        clearTimeout(pendingTooltipTimeout);
+        pendingTooltipTimeout = null;
+        pendingTooltipElement = null;
+      }
     }
   });
 
@@ -156,6 +187,7 @@ export function leanHydrate(options: SetupOptions = {}) {
     const target = e.target as HTMLElement | null;
     const relatedTarget = e.relatedTarget as HTMLElement | null;
     const symbol = target?.closest("[data-symbol]");
+    const hover = target?.closest("[data-hover]") as HTMLElement | null;
 
     if (symbol) {
       const symbolValue = symbol.getAttribute("data-symbol");
@@ -165,6 +197,39 @@ export function leanHydrate(options: SetupOptions = {}) {
           document.querySelectorAll(`[data-symbol="${CSS.escape(symbolValue)}"]`).forEach((el) => {
             el.classList.remove(hoveredClass);
           });
+        }
+      }
+    }
+
+    if (hover && pendingTooltipElement === hover) {
+      const relatedHover = relatedTarget?.closest("[data-hover]");
+      if (relatedHover !== hover) {
+        if (pendingTooltipTimeout) {
+          clearTimeout(pendingTooltipTimeout);
+          pendingTooltipTimeout = null;
+          pendingTooltipElement = null;
+        }
+      }
+    }
+  });
+
+  document.addEventListener("click", (e) => {
+    const target = e.target as HTMLElement | null;
+    const symbol = target?.closest("[data-symbol]");
+    if (symbol) {
+      const symbolValue = symbol.getAttribute("data-symbol");
+      if (symbolValue) {
+        const def = document.querySelector(`[data-symbol="${CSS.escape(symbolValue)}"]`);
+        if (def && def !== target) {
+          def.scrollIntoView({ behavior: "smooth", block: "center" });
+          
+          def.classList.remove("lean-flash");
+          void (def as HTMLElement).offsetWidth; 
+          def.classList.add("lean-flash");
+          
+          setTimeout(() => {
+            def.classList.remove("lean-flash");
+          }, 1000);
         }
       }
     }

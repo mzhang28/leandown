@@ -129,241 +129,188 @@ export class LeanLSPClient {
       }
     }
 
+    const lines = content.split("\n");
+
     if (options.synchronizedHovers) {
       const tempFileName = this.tempFileUri.split("/").pop();
-      const skipTypes = new Set(["keyword", "comment", "string", "number", "regexp", "operator", "modifier", "event", "leanSorryLike"]);
-      const regex = /[a-zA-Z_α-ωΑ-Ω][a-zA-Z0-9_α-ωΑ-Ω']*/g;
+      const tokenizeRegex = /[a-zA-Z_α-ωΑ-Ω0-9']+|[^\s]/g;
 
-      // Query document symbols to find containing declarations
-      const symbolsRes = await this.sendRequest("textDocument/documentSymbol", {
-        textDocument: { uri: this.tempFileUri }
-      });
-      const symbols: any[] = symbolsRes.result || [];
-
-      interface MatchInfo {
-        word: string;
-        lineIndex: number;
+      interface QueryToken {
+        line: number;
         startChar: number;
         length: number;
-        existingToken?: Token;
+        word: string;
+      }
+
+      const queryTokens: QueryToken[] = [];
+      for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
+        const lineText = lines[lineIndex];
+        if (!lineText) continue;
+
+        let match;
+        tokenizeRegex.lastIndex = 0;
+        while ((match = tokenizeRegex.exec(lineText)) !== null) {
+          queryTokens.push({
+            line: lineIndex,
+            startChar: match.index,
+            length: match[0].length,
+            word: match[0]
+          });
+        }
+      }
+
+      const results = await Promise.all(
+        queryTokens.map(async (qt) => {
+          const [defRes, hoverRes] = await Promise.all([
+            this.sendRequest("textDocument/definition", {
+              textDocument: { uri: this.tempFileUri },
+              position: { line: qt.line + prependLines, character: qt.startChar }
+            }).catch(() => null),
+            this.sendRequest("textDocument/hover", {
+              textDocument: { uri: this.tempFileUri },
+              position: { line: qt.line + prependLines, character: qt.startChar }
+            }).catch(() => null)
+          ]);
+          return { qt, defRes, hoverRes };
+        })
+      );
+
+      interface DiscoveredToken {
+        startLine: number;
+        startChar: number;
+        endLine: number;
+        endChar: number;
+        defUri: string | null;
         defLine: number | null;
         defChar: number | null;
-        defUri: string | null;
         hoverText: string;
       }
 
-      const matches: MatchInfo[] = [];
+      const discovered: DiscoveredToken[] = [];
 
-      // Find skip ranges (comments, strings, char literals)
-      const skipRanges: { start: number; end: number }[] = [];
-      let skipMatch;
+      for (const { qt, defRes, hoverRes } of results) {
+        let hoverText = "";
+        let hoverRange: any = null;
 
-      // Line comments
-      const lineCommentRegex = /--.*/g;
-      while ((skipMatch = lineCommentRegex.exec(content)) !== null) {
-        skipRanges.push({ start: skipMatch.index, end: skipMatch.index + skipMatch[0].length });
-      }
+        if (hoverRes && hoverRes.result) {
+          hoverText = extractHoverText(hoverRes);
+          if (hoverRes.result.range) {
+            hoverRange = hoverRes.result.range;
+          }
+        }
 
-      // Block comments
-      const blockCommentRegex = /\/-[\s\S]*?-\//g;
-      while ((skipMatch = blockCommentRegex.exec(content)) !== null) {
-        skipRanges.push({ start: skipMatch.index, end: skipMatch.index + skipMatch[0].length });
-      }
+        let defUri = null;
+        let defLine = null;
+        let defChar = null;
 
-      // String literals
-      const stringRegex = /"(\\.|[^"\\])*"/g;
-      while ((skipMatch = stringRegex.exec(content)) !== null) {
-        skipRanges.push({ start: skipMatch.index, end: skipMatch.index + skipMatch[0].length });
-      }
+        if (defRes && defRes.result) {
+          const defs: any[] = Array.isArray(defRes.result) ? defRes.result : [defRes.result];
+          if (defs.length > 0) {
+            const def = defs[0];
+            const uri = def.targetUri || def.uri;
+            const range = def.targetSelectionRange || def.targetRange || def.range;
+            if (uri && range) {
+              defUri = uri;
+              defLine = range.start.line;
+              defChar = range.start.character;
+            }
+          }
+        }
 
-      // Character literals
-      const charRegex = /'(\\.|[^'\\])'/g;
-      while ((skipMatch = charRegex.exec(content)) !== null) {
-        skipRanges.push({ start: skipMatch.index, end: skipMatch.index + skipMatch[0].length });
-      }
+        if (hoverText || defUri) {
+          const startL = hoverRange ? hoverRange.start.line - prependLines : qt.line;
+          const startC = hoverRange ? hoverRange.start.character : qt.startChar;
+          const endL = hoverRange ? hoverRange.end.line - prependLines : qt.line;
+          const endC = hoverRange ? hoverRange.end.character : qt.startChar + qt.length;
 
-      // Helper to convert index in content to line and character
-      const lineOffsets: number[] = [0];
-      for (let i = 0; i < content.length; i++) {
-        if (content[i] === "\n") {
-          lineOffsets.push(i + 1);
+          discovered.push({
+            startLine: startL,
+            startChar: startC,
+            endLine: endL,
+            endChar: endC,
+            defUri,
+            defLine,
+            defChar,
+            hoverText
+          });
         }
       }
 
-      const getLineAndChar = (index: number) => {
-        let line = 0;
-        while (line + 1 < lineOffsets.length && lineOffsets[line + 1]! <= index) {
-          line++;
-        }
-        const character = index - lineOffsets[line]!;
-        return { line, character };
-      };
-
-      let match;
-      regex.lastIndex = 0;
-      while ((match = regex.exec(content)) !== null) {
-        const word = match[0];
-        const startPos = match.index;
-
-        // Check if inside any skip range
-        const isSkipped = skipRanges.some(r => startPos >= r.start && startPos < r.end);
-        if (isSkipped) {
-          continue;
-        }
-
-        const { line: lineIndex, character: startChar } = getLineAndChar(startPos);
-        const length = word.length;
-
-        // Check if there is an existing token covering this position that should be skipped
-        const coveringToken = tokens.find(t => 
-          t.line === lineIndex && 
-          startChar >= t.start && 
-          startChar < (t.start + t.length)
+      const uniqueTokens: DiscoveredToken[] = [];
+      for (const d of discovered) {
+        const existing = uniqueTokens.find(u => 
+          u.startLine === d.startLine && u.startChar === d.startChar &&
+          u.endLine === d.endLine && u.endChar === d.endChar
         );
-        if (coveringToken && skipTypes.has(coveringToken.type)) {
-          continue;
-        }
-
-        const existingToken = tokens.find(t => t.line === lineIndex && t.start === startChar);
-
-        matches.push({
-          word,
-          lineIndex,
-          startChar,
-          length,
-          existingToken,
-          defLine: null,
-          defChar: null,
-          defUri: null,
-          hoverText: ""
-        });
-      }
-
-      // Query definition and hover for each match
-      for (const m of matches) {
-        // Query definition
-        const defRes = await this.sendRequest("textDocument/definition", {
-          textDocument: { uri: this.tempFileUri },
-          position: { line: m.lineIndex + prependLines, character: m.startChar }
-        });
-
-        const defs: any[] = Array.isArray(defRes.result) 
-          ? defRes.result 
-          : (defRes.result ? [defRes.result] : []);
-
-        if (defs.length > 0) {
-          const def = defs[0];
-          const uri = def.targetUri || def.uri;
-          const range = def.targetSelectionRange || def.targetRange || def.range;
-          
-          if (uri && range) {
-            m.defUri = uri;
-            m.defLine = range.start.line;
-            m.defChar = range.start.character;
-          }
-        }
-
-        // Query hover
-        const hoverRes = await this.sendRequest("textDocument/hover", {
-          textDocument: { uri: this.tempFileUri },
-          position: { line: m.lineIndex + prependLines, character: m.startChar }
-        });
-        const rawHover = extractHoverText(hoverRes);
-        if (rawHover) {
-          const compiled = await remark().use(remarkHtml).process(rawHover);
-          m.hoverText = addTargetBlank(String(compiled).trim());
-        } else {
-          m.hoverText = "";
-        }
-      }
-
-      // Resolve groups
-      for (const m of matches) {
-        let groupId = "";
-        if (m.defLine !== null && m.defChar !== null && m.defUri !== null) {
-          if (tempFileName && m.defUri.endsWith(tempFileName)) {
-            groupId = `ref-${m.defLine}-${m.defChar}`;
-          } else {
-            const uriHash = hashString(m.defUri);
-            groupId = `ref-ext-${uriHash}-${m.defLine}-${m.defChar}`;
+        if (existing) {
+          if (!existing.hoverText && d.hoverText) existing.hoverText = d.hoverText;
+          if (!existing.defUri && d.defUri) {
+            existing.defUri = d.defUri;
+            existing.defLine = d.defLine;
+            existing.defChar = d.defChar;
           }
         } else {
-          // Fallback to document symbol-scoped auto-implicit/implicit logic
-          const fullLine = m.lineIndex + prependLines;
-          const containingSymbol = symbols.find(sym => {
-            const start = sym.range.start.line;
-            const end = sym.range.end.line;
-            return fullLine >= start && fullLine <= end;
-          });
-
-          // Find all candidates: same word, no definition, same containing symbol (or both null)
-          const candidates = matches.filter(o => 
-            o.word === m.word &&
-            o.defLine === null &&
-            symbols.find(sym => {
-              const start = sym.range.start.line;
-              const end = sym.range.end.line;
-              return (o.lineIndex + prependLines) >= start && (o.lineIndex + prependLines) <= end;
-            })?.name === containingSymbol?.name
-          );
-
-          // Sort candidates by position
-          candidates.sort((a, b) => {
-            if (a.lineIndex !== b.lineIndex) return a.lineIndex - b.lineIndex;
-            return a.startChar - b.startChar;
-          });
-
-          const first = candidates[0];
-          if (first) {
-            groupId = `ref-${first.lineIndex + prependLines}-${first.startChar}`;
-          }
-        }
-
-        if (groupId || m.hoverText) {
-          if (m.existingToken) {
-            if (groupId) m.existingToken.groupId = groupId;
-            if (m.hoverText) m.existingToken.hoverText = m.hoverText;
-          } else {
-            tokens.push({
-              line: m.lineIndex,
-              start: m.startChar,
-              length: m.length,
-              type: "variable",
-              groupId,
-              hoverText: m.hoverText
-            });
-          }
+          uniqueTokens.push(d);
         }
       }
 
-      // Build wordMap for identifier tracking
+      for (const u of uniqueTokens) {
+        if (u.hoverText) {
+          const compiled = await remark().use(remarkHtml).process(u.hoverText);
+          u.hoverText = addTargetBlank(String(compiled).trim());
+        }
+      }
+
       const wordMap = new Map<string, { type: string; groupId?: string; hoverText?: string }>();
-      for (const m of matches) {
-        const tok = m.existingToken || tokens.find(t => t.line === m.lineIndex && t.start === m.startChar);
-        const type = tok?.type || "variable";
-        const groupId = tok?.groupId;
-        const hoverText = tok?.hoverText;
 
-        if (!wordMap.has(m.word) || (hoverText && !wordMap.get(m.word)?.hoverText)) {
-          wordMap.set(m.word, { type, groupId, hoverText });
+      for (const ut of uniqueTokens) {
+        let groupId = "";
+        if (ut.defLine !== null && ut.defChar !== null && ut.defUri !== null) {
+          if (tempFileName && ut.defUri.endsWith(tempFileName)) {
+            groupId = `ref-${ut.defLine}-${ut.defChar}`;
+          } else {
+            const uriHash = hashString(ut.defUri);
+            groupId = `ref-ext-${uriHash}-${ut.defLine}-${ut.defChar}`;
+          }
+        }
+
+        for (let l = ut.startLine; l <= ut.endLine; l++) {
+          if (l < 0 || l >= lines.length) continue;
+          const sChar = (l === ut.startLine) ? ut.startChar : 0;
+          const eChar = (l === ut.endLine) ? ut.endChar : (lines[l] || "").length;
+          
+          if (eChar > sChar) {
+            const existing = tokens.find(t => t.line === l && t.start === sChar && t.length === (eChar - sChar));
+            if (existing) {
+              if (groupId) existing.groupId = groupId;
+              if (ut.hoverText) existing.hoverText = ut.hoverText;
+            } else {
+              tokens.push({
+                line: l,
+                start: sChar,
+                length: eChar - sChar,
+                type: "hover-span",
+                groupId,
+                hoverText: ut.hoverText
+              });
+            }
+
+            const word = (lines[l] || "").substring(sChar, eChar);
+            if (!wordMap.has(word) || (ut.hoverText && !wordMap.get(word)?.hoverText)) {
+              wordMap.set(word, { type: existing ? existing.type : "hover-span", groupId, hoverText: ut.hoverText });
+            }
+          }
         }
       }
 
-      // Highlight identifier words inside the hover text of each match
-      for (const m of matches) {
-        if (m.hoverText) {
-          m.hoverText = highlightGoalHtml(m.hoverText, wordMap);
-        }
-        const tok = m.existingToken || tokens.find(t => t.line === m.lineIndex && t.start === m.startChar);
-        if (tok && m.hoverText) {
-          tok.hoverText = m.hoverText;
+      for (const t of tokens) {
+        if (t.hoverText) {
+          t.hoverText = highlightGoalHtml(t.hoverText, wordMap);
         }
       }
 
       this.currentWordMap = wordMap;
     }
-
-    const lines = content.split("\n");
     interface GoalPosition {
       character: number;
       compiledHtml: string;
@@ -427,28 +374,39 @@ export class LeanLSPClient {
     }
 
     const highlightedLines = lines.map((lineText, lineIndex) => {
-      const lineTokens = tokens
-        .filter((t) => t.line === lineIndex)
-        .sort((a, b) => a.start - b.start);
+      const lineTokens = tokens.filter((t) => t.line === lineIndex);
 
-      const events: { index: number; type: 'token' | 'goal'; data: any }[] = [];
+      const events: { index: number; kind: 'start' | 'end' | 'goal'; data: any; length?: number; id?: number }[] = [];
 
-      for (const token of lineTokens) {
-        events.push({ index: token.start, type: 'token', data: token });
+      for (let i = 0; i < lineTokens.length; i++) {
+        const token = lineTokens[i];
+        events.push({ index: token.start, kind: 'start', data: token, length: token.length, id: i });
+        events.push({ index: token.start + token.length, kind: 'end', data: token, length: token.length, id: i });
       }
 
       const goals = lineGoals.get(lineIndex) || [];
       for (const goal of goals) {
-        events.push({ index: goal.character, type: 'goal', data: goal });
+        events.push({ index: goal.character, kind: 'goal', data: goal });
       }
 
-      // Sort events by index. If index is equal, 'goal' comes before 'token'
       events.sort((a, b) => {
-        if (a.index !== b.index) {
-          return a.index - b.index;
+        if (a.index !== b.index) return a.index - b.index;
+        
+        if (a.kind === 'goal' && b.kind !== 'goal') return -1;
+        if (b.kind === 'goal' && a.kind !== 'goal') return 1;
+
+        if (a.kind === 'end' && b.kind === 'start') return -1;
+        if (a.kind === 'start' && b.kind === 'end') return 1;
+
+        if (a.kind === 'start' && b.kind === 'start') {
+          if (a.length !== b.length) return b.length! - a.length!;
+          return a.id! - b.id!;
         }
-        if (a.type === 'goal' && b.type === 'token') return -1;
-        if (a.type === 'token' && b.type === 'goal') return 1;
+        if (a.kind === 'end' && b.kind === 'end') {
+          if (a.length !== b.length) return a.length! - b.length!;
+          return b.id! - a.id!;
+        }
+
         return 0;
       });
 
@@ -461,24 +419,18 @@ export class LeanLSPClient {
           lastIndex = event.index;
         }
 
-        if (event.type === 'token') {
+        if (event.kind === 'start') {
           const token = event.data;
-          if (token.start < lastIndex) continue;
-
-          const tokenText = lineText.substring(token.start, token.start + token.length);
           let dataAttr = "";
           if (options.synchronizedHovers) {
-            if (token.groupId) {
-              dataAttr += ` data-symbol="${token.groupId}"`;
-            }
-            if (token.hoverText) {
-              dataAttr += ` data-hover="${escapeHtml(token.hoverText)}"`;
-            }
+            if (token.groupId) dataAttr += ` data-symbol="${token.groupId}"`;
+            if (token.hoverText) dataAttr += ` data-hover="${escapeHtml(token.hoverText)}"`;
           }
-
-          html += `<span class="lean-${token.type}"${dataAttr}>${escapeHtml(tokenText)}</span>`;
-          lastIndex = token.start + token.length;
-        } else if (event.type === 'goal') {
+          const cls = token.type ? `lean-${token.type}` : "lean-hover-span";
+          html += `<span class="${cls}"${dataAttr}>`;
+        } else if (event.kind === 'end') {
+          html += `</span>`;
+        } else if (event.kind === 'goal') {
           const goal = event.data;
           html += `<span class="lean-goal-marker" data-hover="${escapeHtml(goal.compiledHtml)}">⊢</span>`;
         }
