@@ -18,11 +18,16 @@ export default defineConfig({
       title: 'My Docs',
       social: [{ icon: 'github', label: 'GitHub', href: 'https://github.com/mzhang28/remark-lean' }],
       sidebar: [
-        { label: 'Roadmap', slug: 'roadmap' },
-        {
-          label: 'STLC',
+        { label: 'Overview', 
           items: [
-            { label: 'Introduction', slug: 'stlc/introduction' },
+        { label: 'Intro', slug: 'intro' },
+        { label: 'Roadmap', slug: 'roadmap' },
+          ],
+        },
+        {
+          label: 'Examples',
+          items: [
+            { label: 'STLC', slug: 'stlc' },
           ],
         },
       ],

@@ -219,19 +219,27 @@ export function leanHydrate(options: SetupOptions = {}) {
     if (symbol) {
       const symbolValue = symbol.getAttribute("data-symbol");
       if (symbolValue) {
-        const def = document.querySelector(`[data-symbol="${CSS.escape(symbolValue)}"]`);
-        if (def && def !== target) {
-          def.scrollIntoView({ behavior: "smooth", block: "center" });
-          
-          def.classList.remove("lean-flash");
-          void (def as HTMLElement).offsetWidth; 
-          def.classList.add("lean-flash");
-          
-          setTimeout(() => {
+        const def = document.querySelector(`[data-symbol="${CSS.escape(symbolValue)}"][data-is-definition="true"]`) as HTMLElement | null;
+        if (def) {
+          if (def !== target) {
+            def.scrollIntoView({ behavior: "smooth", block: "center" });
+            
             def.classList.remove("lean-flash");
-          }, 1000);
+            void def.offsetWidth; 
+            def.classList.add("lean-flash");
+            
+            setTimeout(() => {
+              def.classList.remove("lean-flash");
+            }, 1000);
+          }
+        } else {
+          const permalink = symbol.getAttribute("data-permalink");
+          if (permalink) {
+            window.open(permalink, "_blank");
+          }
         }
       }
     }
   });
 }
+

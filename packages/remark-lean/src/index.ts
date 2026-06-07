@@ -66,6 +66,8 @@ function setCachedHighlight(hash: string, html: string) {
   }
 }
 
+const CACHE_VERSION = "v3-permalinks";
+
 export default function remarkLean(options: RemarkLeanOptions) {
   if (!options || typeof options.rootUri !== "string") {
     throw new Error("remark-lean: 'rootUri' option is required");
@@ -86,6 +88,7 @@ export default function remarkLean(options: RemarkLeanOptions) {
     for (const node of leanNodes) {
       const syncHovers = options.synchronizedHovers ?? true;
       const cacheKey = hashContent(JSON.stringify({
+        cacheVersion: CACHE_VERSION,
         content: node.value,
         prependCode: cumulativeContent,
         syncHovers

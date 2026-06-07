@@ -144,4 +144,79 @@ test.describe("Lean Markdown Renderer E2E Tests", () => {
     await page.waitForTimeout(400);
     await expect(page.locator(".lean-tooltip")).toHaveCount(0);
   });
+
+  test("should open external permalinks in a new tab when clicking on external symbols", async ({ page, context }) => {
+    // Check if there's any element with data-permalink
+    const externalLink = page.locator("[data-permalink]");
+    await expect(externalLink.first()).toBeVisible();
+
+    const permalinkUrl = await externalLink.first().getAttribute("data-permalink");
+    expect(permalinkUrl).toContain("https://github.com/leanprover/lean4/blob/");
+
+    // Wait for the popup/new tab when clicking the link
+    const [newPage] = await Promise.all([
+      context.waitForEvent("page"),
+      externalLink.first().click(),
+    ]);
+
+    expect(newPage.url()).toBe(permalinkUrl!);
+    await newPage.close();
+  });
+
+  test("should scroll to local definition when clicking on a usage of a local symbol", async ({ page }) => {
+    // Find all local definition elements
+    const defElements = page.locator('[data-is-definition="true"]');
+    const defCount = await defElements.count();
+    expect(defCount).toBeGreaterThan(0);
+
+    let foundSymbolId = "";
+    let usageLocator = null;
+    let defLocator = null;
+
+    // Find a definition that has at least one usage on the page
+    for (let i = 0; i < defCount; i++) {
+      const defEl = defElements.nth(i);
+      const symbolId = await defEl.getAttribute("data-symbol");
+      if (symbolId) {
+        const usageEl = page.locator(`[data-symbol="${symbolId}"]:not([data-is-definition="true"])`);
+        if (await usageEl.count() > 0) {
+          foundSymbolId = symbolId;
+          usageLocator = usageEl.first();
+          defLocator = defEl;
+          break;
+        }
+      }
+    }
+
+    expect(foundSymbolId).toBeTruthy();
+    expect(usageLocator).not.toBeNull();
+    expect(defLocator).not.toBeNull();
+
+    // Trigger scroll by clicking the usage element
+    await usageLocator!.click();
+
+    // The definition element should get the flash class
+    await expect(defLocator!).toHaveClass(/lean-flash/);
+  });
+
+  test("should scroll to local definition across different code blocks on the same page", async ({ page }) => {
+    // Find the definition of Set in the second block (index 1)
+    const setDef = page.locator('pre code.language-lean').nth(1).locator('span:text-is("Set")').first();
+    await expect(setDef).toHaveAttribute("data-is-definition", "true");
+
+    // Find the usage of Set in the fourth block (index 3)
+    const setUsage = page.locator('pre code.language-lean').nth(3).locator('span:text-is("Set")').first();
+    await expect(setUsage).not.toHaveAttribute("data-is-definition");
+
+    const usageSymbol = await setUsage.getAttribute("data-symbol");
+    expect(usageSymbol).toBeTruthy();
+
+    // Click the usage
+    await setUsage.click();
+    await page.waitForTimeout(500); // Give it a moment to run the click listener
+
+    // The definition should get flashed
+    await expect(setDef).toHaveClass(/lean-flash/);
+  });
 });
+

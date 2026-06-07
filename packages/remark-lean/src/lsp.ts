@@ -1,5 +1,7 @@
-import { spawn, type ChildProcess } from "node:child_process";
+import { spawn, execSync, type ChildProcess } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import fs from "node:fs";
+import path from "node:path";
 import { remark } from "remark";
 import remarkHtml from "remark-html";
 
@@ -10,6 +12,8 @@ export interface Token {
   type: string;
   groupId?: string;
   hoverText?: string;
+  permalink?: string;
+  isDefinition?: boolean;
 }
 
 export class LeanLSPClient {
@@ -189,6 +193,7 @@ export class LeanLSPClient {
         defLine: number | null;
         defChar: number | null;
         hoverText: string;
+        permalink?: string;
       }
 
       const discovered: DiscoveredToken[] = [];
@@ -222,6 +227,14 @@ export class LeanLSPClient {
           }
         }
 
+        let permalink: string | undefined;
+        if (defUri && defLine !== null) {
+          const isLocal = defUri.includes("__temp_remark_lean_");
+          if (!isLocal) {
+            permalink = getPermalinkForUri(defUri, defLine);
+          }
+        }
+
         if (hoverText || defUri) {
           const startL = hoverRange ? hoverRange.start.line - prependLines : qt.line;
           const startC = hoverRange ? hoverRange.start.character : qt.startChar;
@@ -236,10 +249,12 @@ export class LeanLSPClient {
             defUri,
             defLine,
             defChar,
-            hoverText
+            hoverText,
+            permalink
           });
         }
       }
+
 
       const uniqueTokens: DiscoveredToken[] = [];
       for (const d of discovered) {
@@ -254,10 +269,14 @@ export class LeanLSPClient {
             existing.defLine = d.defLine;
             existing.defChar = d.defChar;
           }
+          if (!existing.permalink && d.permalink) {
+            existing.permalink = d.permalink;
+          }
         } else {
           uniqueTokens.push(d);
         }
       }
+
 
       for (const u of uniqueTokens) {
         if (u.hoverText) {
@@ -266,12 +285,12 @@ export class LeanLSPClient {
         }
       }
 
-      const wordMap = new Map<string, { type: string; groupId?: string; hoverText?: string }>();
+      const wordMap = new Map<string, { type: string; groupId?: string; hoverText?: string; permalink?: string }>();
 
       for (const ut of uniqueTokens) {
         let groupId = "";
         if (ut.defLine !== null && ut.defChar !== null && ut.defUri !== null) {
-          if (tempFileName && ut.defUri.endsWith(tempFileName)) {
+          if (ut.defUri.includes("__temp_remark_lean_")) {
             groupId = `ref-${ut.defLine}-${ut.defChar}`;
           } else {
             const uriHash = hashString(ut.defUri);
@@ -286,9 +305,12 @@ export class LeanLSPClient {
           
           if (eChar > sChar) {
             const existing = tokens.find(t => t.line === l && t.start === sChar && t.length === (eChar - sChar));
+            const isDef = !!(tempFileName && ut.defUri && ut.defUri.endsWith(tempFileName) && ut.defLine !== null && (ut.defLine - prependLines) === l && ut.defChar !== null && ut.defChar >= sChar && ut.defChar < eChar);
             if (existing) {
               if (groupId) existing.groupId = groupId;
               if (ut.hoverText) existing.hoverText = ut.hoverText;
+              if (ut.permalink) existing.permalink = ut.permalink;
+              if (isDef) existing.isDefinition = true;
             } else {
               tokens.push({
                 line: l,
@@ -296,17 +318,25 @@ export class LeanLSPClient {
                 length: eChar - sChar,
                 type: "hover-span",
                 groupId,
-                hoverText: ut.hoverText
+                hoverText: ut.hoverText,
+                permalink: ut.permalink,
+                isDefinition: isDef
               });
             }
 
             const word = (lines[l] || "").substring(sChar, eChar);
             if (!wordMap.has(word) || (ut.hoverText && !wordMap.get(word)?.hoverText)) {
-              wordMap.set(word, { type: existing ? existing.type : "hover-span", groupId, hoverText: ut.hoverText });
+              wordMap.set(word, { 
+                type: existing ? existing.type : "hover-span", 
+                groupId, 
+                hoverText: ut.hoverText,
+                permalink: ut.permalink
+              });
             }
           }
         }
       }
+
 
       for (const t of tokens) {
         if (t.hoverText) {
@@ -430,7 +460,10 @@ export class LeanLSPClient {
           if (options.synchronizedHovers) {
             if (token.groupId) dataAttr += ` data-symbol="${token.groupId}"`;
             if (token.hoverText) dataAttr += ` data-hover="${escapeHtml(token.hoverText)}"`;
+            if (token.permalink) dataAttr += ` data-permalink="${escapeHtml(token.permalink)}"`;
+            if (token.isDefinition) dataAttr += ` data-is-definition="true"`;
           }
+
           const cls = token.type ? `lean-${token.type}` : "lean-hover-span";
           html += `<span class="${cls}"${dataAttr}>`;
         } else if (event.kind === 'end') {
@@ -579,7 +612,7 @@ function addTargetBlank(html: string): string {
 
 function highlightGoalHtml(
   html: string,
-  wordMap: Map<string, { type: string; groupId?: string; hoverText?: string }>
+  wordMap: Map<string, { type: string; groupId?: string; hoverText?: string; permalink?: string }>
 ): string {
   const codeBlockRegex = /<code class="language-lean">([\s\S]*?)<\/code>/g;
 
@@ -598,6 +631,9 @@ function highlightGoalHtml(
         if (info.hoverText) {
           dataAttr += ` data-hover="${escapeHtml(info.hoverText)}"`;
         }
+        if (info.permalink) {
+          dataAttr += ` data-permalink="${escapeHtml(info.permalink)}"`;
+        }
         return `<span class="lean-${info.type}"${dataAttr}>${word}</span>`;
       }
       return word;
@@ -606,3 +642,107 @@ function highlightGoalHtml(
     return `<code class="language-lean">${highlightedCode}</code>`;
   });
 }
+
+let leanVersion: string | null = null;
+function getLeanVersion(): string {
+  if (leanVersion !== null) return leanVersion;
+  try {
+    const output = execSync("lean --version", { encoding: "utf8" });
+    const match = output.match(/version\s+([v0-9.]+)/i);
+    if (match && match[1]) {
+      leanVersion = match[1].startsWith("v") ? match[1] : `v${match[1]}`;
+      return leanVersion;
+    }
+  } catch (e) {}
+  leanVersion = "master";
+  return leanVersion;
+}
+
+function getPermalinkForUri(uri: string, line: number): string | undefined {
+  // Convert backslashes to forward slashes for unified regex matching
+  const normalizedUri = uri.replace(/\\/g, "/");
+
+  // 1. Check if it is a standard library file (matches "/src/lean/" followed by Init, Lean, Std, or lake)
+  const stdlibMatch = normalizedUri.match(/\/src\/lean\/((?:Init|Lean|Std|lake)\/.+)$/i);
+  if (stdlibMatch) {
+    const relativePath = stdlibMatch[1];
+    
+    // Attempt to extract version from elan toolchain folder name first
+    let version = "master";
+    const elanMatch = normalizedUri.match(/\/toolchains\/([^/#?]+)\/src\/lean\//i);
+    if (elanMatch && elanMatch[1]) {
+      const folderName = elanMatch[1];
+      if (folderName.includes("---")) {
+        version = folderName.split("---").pop()!;
+      } else if (folderName.includes(":")) {
+        version = folderName.split(":").pop()!;
+      } else {
+        version = folderName;
+      }
+    } else {
+      // Fallback to active Lean compiler version
+      version = getLeanVersion();
+    }
+    
+    return `https://github.com/leanprover/lean4/blob/${version}/src/${relativePath}#L${line + 1}`;
+  }
+
+  // 2. Check local git repositories (separate packages)
+  try {
+    const filePath = fileURLToPath(uri);
+    const dir = path.dirname(filePath);
+    if (!fs.existsSync(dir)) return undefined;
+
+    // Check if it's inside a git repository
+    const isGit = execSync("git rev-parse --is-inside-work-tree", {
+      cwd: dir,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"]
+    }).trim();
+
+    if (isGit === "true") {
+      const gitRoot = execSync("git rev-parse --show-toplevel", {
+        cwd: dir,
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "ignore"]
+      }).trim();
+
+      const remoteUrl = execSync("git config --get remote.origin.url", {
+        cwd: dir,
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "ignore"]
+      }).trim();
+
+      if (remoteUrl) {
+        let cleanedUrl = remoteUrl.trim();
+        if (cleanedUrl.endsWith(".git")) {
+          cleanedUrl = cleanedUrl.slice(0, -4);
+        }
+        const githubRegex = /github\.com[:\/]([^\/]+)\/(.+)$/i;
+        const match = cleanedUrl.match(githubRegex);
+        if (match) {
+          const owner = match[1];
+          const repo = match[2];
+          const githubUrl = `https://github.com/${owner}/${repo}`;
+
+          // Get commit SHA
+          const commit = execSync("git rev-parse HEAD", {
+            cwd: dir,
+            encoding: "utf8",
+            stdio: ["ignore", "pipe", "ignore"]
+          }).trim();
+
+          // Get relative path of the file from the git root
+          const relativePath = path.relative(gitRoot, filePath).replace(/\\/g, "/");
+
+          return `${githubUrl}/blob/${commit}/${relativePath}#L${line + 1}`;
+        }
+      }
+    }
+  } catch (e) {
+    // If any git command fails, just ignore and return undefined
+  }
+  return undefined;
+}
+
+
