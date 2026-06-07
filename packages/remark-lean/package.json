@@ -8,14 +8,27 @@
   "types": "dist/index.d.ts",
   "exports": {
     ".": {
-      "import": "./dist/index.js",
+      "import": "./src/index.ts",
       "types": "./dist/index.d.ts"
     },
     "./runtime": {
-      "import": "./dist/runtime.js",
+      "import": "./src/runtime.ts",
       "types": "./dist/runtime.d.ts"
     },
-    "./lean.css": "./dist/lean.css"
+    "./lean.css": "./src/lean.css"
+  },
+  "publishConfig": {
+    "exports": {
+      ".": {
+        "import": "./dist/index.js",
+        "types": "./dist/index.d.ts"
+      },
+      "./runtime": {
+        "import": "./dist/runtime.js",
+        "types": "./dist/runtime.d.ts"
+      },
+      "./lean.css": "./dist/lean.css"
+    }
   },
   "files": [
     "dist"

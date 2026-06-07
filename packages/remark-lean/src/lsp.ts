@@ -515,6 +515,7 @@ export class LeanLSPClient {
     const id = this.nextRequestId++;
     return new Promise((res) => {
       this.pendingRequests.set(id, res);
+      console.log(`sent req ${method}: ${JSON.stringify(params)}`)
       const payload = JSON.stringify({ jsonrpc: "2.0", id, method, params });
       const message = `Content-Length: ${Buffer.byteLength(payload, "utf8")}\r\n\r\n${payload}`;
       this.proc!.stdin!.write(message);

@@ -28,7 +28,7 @@ export default function remarkLean(options: RemarkLeanOptions) {
       let cumulativeContent = "";
       for (const node of leanNodes) {
         const highlighted = await client.highlight(node.value, {
-          synchronizedHovers: options.synchronizedHovers,
+          synchronizedHovers: options.synchronizedHovers ?? true,
           prependCode: cumulativeContent
         });
 
