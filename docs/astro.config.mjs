@@ -18,17 +18,12 @@ export default defineConfig({
       title: 'My Docs',
       social: [{ icon: 'github', label: 'GitHub', href: 'https://github.com/withastro/starlight' }],
       sidebar: [
+        { label: 'Roadmap', slug: 'roadmap' },
         {
-          label: 'Guides',
+          label: 'STLC',
           items: [
-            { label: 'Example Guide', slug: 'guides/example' },
-            { label: 'Lean Integration', slug: 'guides/lean' },
-            { label: 'Roadmap & Features', slug: 'guides/roadmap' },
+            { label: 'Introduction', slug: 'stlc/introduction' },
           ],
-        },
-        {
-          label: 'Reference',
-          items: [{ autogenerate: { directory: 'reference' } }],
         },
       ],
       customCss: [
