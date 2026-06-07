@@ -128,9 +128,13 @@ pre code.language-lean {
   word-break: break-word;
 }
 
+.lean-tooltip pre:last-child {
+  margin-bottom: 0;
+}
+
 .lean-tooltip pre code {
   font-family: 'Fira Code', 'JetBrains Mono', monospace;
-  font-size: 0.85em;
+  font-size: 0.95rem;
   color: #a6e3a1; /* Highlight type signatures in green */
   background-color: transparent;
   padding: 0;
@@ -140,7 +144,7 @@ pre code.language-lean {
 
 .lean-tooltip code {
   font-family: 'Fira Code', 'JetBrains Mono', monospace;
-  font-size: 0.85em;
+  font-size: 0.95em;
   color: #f38ba8; /* inline code color */
   background-color: #313244;
   padding: 1px 3px;
