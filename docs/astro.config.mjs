@@ -16,7 +16,7 @@ export default defineConfig({
   integrations: [
     starlight({
       title: 'My Docs',
-      social: [{ icon: 'github', label: 'GitHub', href: 'https://github.com/withastro/starlight' }],
+      social: [{ icon: 'github', label: 'GitHub', href: 'https://github.com/mzhang28/remark-lean' }],
       sidebar: [
         { label: 'Roadmap', slug: 'roadmap' },
         {
@@ -27,7 +27,8 @@ export default defineConfig({
         },
       ],
       customCss: [
-        'remark-lean/lean.css'
+        'remark-lean/lean.css',
+        './src/styles/custom.css'
       ],
       components: {
         Head: './src/components/Head.astro',
