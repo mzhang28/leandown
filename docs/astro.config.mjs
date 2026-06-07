@@ -20,8 +20,8 @@ export default defineConfig({
       sidebar: [
         { label: 'Overview', 
           items: [
-        { label: 'Intro', slug: 'intro' },
-        { label: 'Roadmap', slug: 'roadmap' },
+        { label: 'Intro', slug: 'overview/intro' },
+        { label: 'Roadmap', slug: 'overview/roadmap' },
           ],
         },
         {
