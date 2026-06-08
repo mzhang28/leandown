@@ -288,6 +288,90 @@ test.describe("Lean Markdown Renderer E2E Tests", () => {
     const tooltip = page.locator(".lean-tooltip").first();
     await expect(tooltip).toBeVisible();
   });
+
+  test("should keep hover highlight when moving between elements of the same symbol", async ({ page }) => {
+    // Find a symbol with multiple occurrences
+    const symbols = page.locator("[data-symbol]");
+    await expect(symbols.first()).toBeVisible();
+
+    const count = await symbols.count();
+    let targetSymbol = "";
+    let occurrence1 = null;
+    let occurrence2 = null;
+
+    for (let i = 0; i < count; i++) {
+      const symbol = symbols.nth(i);
+      const symbolId = await symbol.getAttribute("data-symbol");
+      if (symbolId) {
+        const matches = page.locator(`[data-symbol="${symbolId}"]`);
+        if (await matches.count() > 1) {
+          targetSymbol = symbolId;
+          occurrence1 = matches.nth(0);
+          occurrence2 = matches.nth(1);
+          break;
+        }
+      }
+    }
+
+    expect(targetSymbol).toBeTruthy();
+
+    // Hover over first occurrence
+    await occurrence1!.hover();
+    await expect(occurrence1!).toHaveClass(/lean-hovered/);
+    await expect(occurrence2!).toHaveClass(/lean-hovered/);
+
+    // Move directly to the second occurrence
+    await occurrence2!.hover();
+
+    // Both should remain highlighted
+    await expect(occurrence1!).toHaveClass(/lean-hovered/);
+    await expect(occurrence2!).toHaveClass(/lean-hovered/);
+  });
+
+  test("should handle nested tooltip state transitions correctly", async ({ page }) => {
+    // 1. Open the first tooltip (hover over 'hello')
+    const hoverable = page.locator("[data-hover]").first();
+    await expect(hoverable).toBeVisible();
+    await hoverable.hover();
+
+    const parentTooltip = page.locator(".lean-tooltip").first();
+    await expect(parentTooltip).toBeVisible();
+
+    // 2. Find a sub-hoverable inside the parent tooltip
+    const subHoverable = parentTooltip.locator("[data-hover]").first();
+    await expect(subHoverable).toBeVisible();
+    await subHoverable.hover();
+
+    // 3. Verify nested tooltip is shown
+    const allTooltips = page.locator(".lean-tooltip");
+    await expect(allTooltips).toHaveCount(2);
+    const childTooltip = allTooltips.nth(1);
+    await expect(childTooltip).toBeVisible();
+
+    // 4. Hover over the child tooltip itself
+    await childTooltip.hover();
+    await page.waitForTimeout(300);
+
+    // Verify both are still visible
+    await expect(parentTooltip).toBeVisible();
+    await expect(childTooltip).toBeVisible();
+
+    // 5. Move mouse back to the parent tooltip (but not on any hoverable element inside it)
+    await parentTooltip.hover();
+
+    // Wait for the child tooltip hide timeout (250ms) to fire
+    await page.waitForTimeout(350);
+
+    // Verify child tooltip is now closed, but parent tooltip remains open
+    await expect(parentTooltip).toBeVisible();
+    await expect(childTooltip).not.toBeVisible();
+    await expect(allTooltips).toHaveCount(1);
+
+    // 6. Move mouse completely away (to h1)
+    await page.locator("h1").hover();
+    await page.waitForTimeout(350);
+
+    // Verify all tooltips are closed
+    await expect(page.locator(".lean-tooltip")).toHaveCount(0);
+  });
 });
-
-

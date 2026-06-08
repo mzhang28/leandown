@@ -1,7 +1,5 @@
 import { LeanLSPClient } from "./lsp";
-import fs from "node:fs";
-import path from "node:path";
-import crypto from "node:crypto";
+import { getCachedHighlight, setCachedHighlight, hashContent, CACHE_VERSION } from "./cache";
 
 export interface RemarkLeanOptions {
   rootUri: string;
@@ -33,43 +31,6 @@ function cleanupClients() {
 process.on("exit", cleanupClients);
 process.on("SIGINT", () => { cleanupClients(); process.exit(0); });
 process.on("SIGTERM", () => { cleanupClients(); process.exit(0); });
-
-function hashContent(content: string): string {
-  return crypto.createHash("sha256").update(content).digest("hex");
-}
-
-function getCachePath(hash: string, customCacheDir?: string): string {
-  const cacheDir = customCacheDir
-    ? path.resolve(process.cwd(), customCacheDir)
-    : path.resolve(process.cwd(), "node_modules", ".cache", "remark-lean");
-  if (!fs.existsSync(cacheDir)) {
-    fs.mkdirSync(cacheDir, { recursive: true });
-  }
-  return path.join(cacheDir, `${hash}.json`);
-}
-
-function getCachedHighlight(hash: string, customCacheDir?: string): string | null {
-  const p = getCachePath(hash, customCacheDir);
-  if (fs.existsSync(p)) {
-    try {
-      return JSON.parse(fs.readFileSync(p, "utf-8"));
-    } catch (e) {
-      return null;
-    }
-  }
-  return null;
-}
-
-function setCachedHighlight(hash: string, html: string, customCacheDir?: string) {
-  const p = getCachePath(hash, customCacheDir);
-  try {
-    fs.writeFileSync(p, JSON.stringify(html), "utf-8");
-  } catch (e) {
-    // ignore
-  }
-}
-
-const CACHE_VERSION = "v3-permalinks";
 
 export default function remarkLean(options: RemarkLeanOptions) {
   if (!options || typeof options.rootUri !== "string") {

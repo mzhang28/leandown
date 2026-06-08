@@ -20,6 +20,15 @@ async function startServer() {
       allowedHosts: ["ephemeral"],
       strictPort: true
     },
+    resolve: {
+      alias: {
+        "remark-lean/runtime": resolve(__dirname, "../../../packages/remark-lean/src/runtime.ts"),
+        "remark-lean": resolve(__dirname, "../../../packages/remark-lean/src/index.ts")
+      }
+    },
+    optimizeDeps: {
+      exclude: ["remark-lean"]
+    },
     plugins: [
       {
         name: "markdown-render-server",

@@ -2,13 +2,14 @@
   "$schema": "https://schema.stryker-mutator.io/bind/stryker-schema.json",
   "mutate": [
     "packages/remark-lean/src/**/*.ts",
-    "!packages/remark-lean/src/**/*.d.ts"
+    "!packages/remark-lean/src/**/*.d.ts",
+    "packages/remark-lean/src/runtime.ts"
   ],
   "testRunner": "command",
   "commandRunner": {
     "command": "bun run test:e2e"
   },
-  "concurrency": 12,
+  "concurrency": 8,
   "incremental": true,
   "checkers": [
     "typescript"
