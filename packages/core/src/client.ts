@@ -9,6 +9,7 @@ import {
   type DiscoveredToken,
   type GoalPosition,
   type DiagnosticPosition,
+  type DiagnosticSpan,
   parseSemanticTokens,
   extractQueryTokens,
   deduplicateDiscoveredTokens,
@@ -390,14 +391,18 @@ export class LeanLSPClient {
     const lineDiagnostics = new Map<number, DiagnosticPosition[]>();
     if (options.synchronizedHovers) {
       for (const [lineIndex, diags] of diagnosticsByLine.entries()) {
+        // Only include diagnostics of severity > 2 (info/hint) for the line-end '…' markers
+        const infoDiags = diags.filter((d) => d.severity > 2);
+        if (infoDiags.length === 0) continue;
+
         const lineText = lines[lineIndex] || "";
         const pos = lineText.length;
 
         // Determine highest severity
-        const highestSeverity = Math.min(...diags.map((d) => d.severity));
+        const highestSeverity = Math.min(...infoDiags.map((d) => d.severity));
 
         // Combine messages
-        const combinedMessage = diags.map((d) => d.message).join("\n\n---\n\n");
+        const combinedMessage = infoDiags.map((d) => d.message).join("\n\n---\n\n");
 
         const markdownMessage = "```lean\n" + combinedMessage + "\n```";
         const compiled = await compileMarkdown(markdownMessage);
@@ -415,12 +420,53 @@ export class LeanLSPClient {
       }
     }
 
+    // Build squiggly annotation spans from actual LSP diagnostic ranges (errors + warnings only)
+    const squigglySpansByLine = new Map<number, DiagnosticSpan[]>();
+    if (options.synchronizedHovers) {
+      for (const d of localDiagnostics) {
+        if (d.severity > 2) continue; // severity 1 = error, 2 = warning
+
+        const dStartLine = d.range.start.line - prependLines;
+        const dEndLine = d.range.end.line - prependLines;
+
+        const markdownMessage = "```lean\n" + d.message + "\n```";
+        const compiled = await compileMarkdown(markdownMessage);
+        const compiledHtml = highlightGoalHtml(
+          addTargetBlank(String(compiled).trim()),
+          wordMap
+        );
+
+        for (
+          let l = Math.max(dStartLine, 0);
+          l <= Math.min(dEndLine, lines.length - 1);
+          l++
+        ) {
+          const lineLen = (lines[l] || "").length;
+          const sc = l === dStartLine ? d.range.start.character : 0;
+          const ec =
+            l === dEndLine
+              ? Math.min(d.range.end.character, lineLen)
+              : lineLen;
+          if (sc >= ec) continue;
+
+          if (!squigglySpansByLine.has(l)) squigglySpansByLine.set(l, []);
+          squigglySpansByLine.get(l)!.push({
+            startChar: sc,
+            endChar: ec,
+            severity: d.severity,
+            compiledHtml,
+          });
+        }
+      }
+    }
+
     const highlightedLines = lines.map((lineText, lineIndex) => {
       const lineTokens = tokens.filter((t) => t.line === lineIndex);
 
       const goals = lineGoals.get(lineIndex) || [];
       const diags = lineDiagnostics.get(lineIndex) || [];
-      const events = createAndSortLineEvents(lineTokens, goals, diags);
+      const squigglySpans = squigglySpansByLine.get(lineIndex) || [];
+      const events = createAndSortLineEvents(lineTokens, goals, diags, squigglySpans);
 
       let html = "";
       let lastIndex = 0;
@@ -463,6 +509,18 @@ export class LeanLSPClient {
           html += `<span class="lean-diagnostic-marker ${severityClass}" data-hover="${escapeHtml(
             diag.compiledHtml
           )}">…</span>`;
+        } else if (event.kind === "squiggly-start") {
+          const span = event.data as DiagnosticSpan;
+          const severityClass =
+            span.severity === 1
+              ? "lean-squiggly-error"
+              : "lean-squiggly-warning";
+          const hoverAttr = span.compiledHtml
+            ? ` data-hover="${escapeHtml(span.compiledHtml)}"`
+            : "";
+          html += `<span class="${severityClass}"${hoverAttr}>`;
+        } else if (event.kind === "squiggly-end") {
+          html += `</span>`;
         }
       }
 

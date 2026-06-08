@@ -39,3 +39,25 @@ Hover over the marker next to `#check` to see the type signature:
 #check Nat.add
 #check hello
 ```
+
+## Error and Warning Annotations
+
+Errors and warnings from the Lean LSP are highlighted directly on the offending code with red or yellow squiggly underlines, matching the style of VS Code. Hovering over a squiggly region shows the full diagnostic message.
+
+### Type Errors
+
+The expression below has a type mismatch — `"hello"` is a `String` but a `Nat` is expected. The error is underlined in red:
+
+```lean
+def badAdd : Nat := "hello" + 1
+```
+
+### Warnings
+
+Unused variables produce a yellow squiggly underline:
+
+```lean
+def unused : Nat :=
+  let x := 42
+  0
+```

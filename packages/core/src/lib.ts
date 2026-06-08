@@ -42,9 +42,16 @@ export interface DiagnosticPosition {
   compiledHtml: string;
 }
 
+export interface DiagnosticSpan {
+  startChar: number;
+  endChar: number;
+  severity: number;
+  compiledHtml: string;
+}
+
 export interface LineEvent {
   index: number;
-  kind: "start" | "end" | "goal" | "diagnostic";
+  kind: "start" | "end" | "goal" | "diagnostic" | "squiggly-start" | "squiggly-end";
   data: any;
   length?: number;
   id?: number;
@@ -253,14 +260,20 @@ const splitTokensByMarker = (tokens: Token[], markerPos: number): Token[] =>
   tokens.flatMap((token) => splitTokenAt(token, markerPos));
 
 /**
- * Generates and sorts start, end, and goal marker events for a single line of code.
+ * Generates and sorts start, end, goal marker, and squiggly annotation events for a single line of code.
  */
 export const createAndSortLineEvents = (
   lineTokens: Token[],
   goals: GoalPosition[],
-  diagnostics: DiagnosticPosition[] = []
+  diagnostics: DiagnosticPosition[] = [],
+  squigglySpans: DiagnosticSpan[] = []
 ): LineEvent[] => {
-  const markerPositions = [...goals, ...diagnostics].map((m) => m.character);
+  // Split tokens at all marker positions (goal/diagnostic markers AND squiggly span boundaries)
+  const markerPositions = [
+    ...goals.map((m) => m.character),
+    ...diagnostics.map((m) => m.character),
+    ...squigglySpans.flatMap((s) => [s.startChar, s.endChar]),
+  ];
   const activeTokens = markerPositions.reduce(
     (tokens, pos) => splitTokensByMarker(tokens, pos),
     lineTokens
@@ -295,13 +308,33 @@ export const createAndSortLineEvents = (
     data: diag,
   }));
 
-  const allEvents = [...tokenEvents, ...goalEvents, ...diagEvents];
+  const squigglyEvents = squigglySpans.flatMap((span, i) => [
+    {
+      index: span.startChar,
+      kind: "squiggly-start" as const,
+      data: span,
+      length: span.endChar - span.startChar,
+      id: i,
+    },
+    {
+      index: span.endChar,
+      kind: "squiggly-end" as const,
+      data: span,
+      length: span.endChar - span.startChar,
+      id: i,
+    },
+  ]);
+
+  const allEvents = [...tokenEvents, ...goalEvents, ...diagEvents, ...squigglyEvents];
 
   const getPriority = (kind: string) => {
-    if (kind === "end") return 0;
-    if (kind === "goal" || kind === "diagnostic") return 1;
-    if (kind === "start") return 2;
-    return 3;
+    // squiggly-end closes before regular ends so squiggly wraps inside tokens
+    if (kind === "squiggly-end") return 0;
+    if (kind === "end") return 1;
+    if (kind === "goal" || kind === "diagnostic") return 2;
+    if (kind === "squiggly-start") return 3;
+    if (kind === "start") return 4;
+    return 5;
   };
 
   return [...allEvents].sort((a, b) => {

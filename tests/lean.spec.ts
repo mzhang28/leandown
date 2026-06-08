@@ -414,4 +414,53 @@ test.describe("Lean Markdown Renderer E2E Tests", () => {
       expect(hasTokenClass).toBe(false);
     }
   });
+
+  test("should render squiggly underlines for errors/warnings without ellipsis markers, and show combined tooltips", async ({ page }) => {
+    // Verify squiggly error and warning elements are visible
+    const errorSquigglies = page.locator(".lean-squiggly-error");
+    const warningSquigglies = page.locator(".lean-squiggly-warning");
+
+    await expect(errorSquigglies.first()).toBeVisible();
+    await expect(warningSquigglies.first()).toBeVisible();
+
+    // Verify there are no ellipsis (lean-diagnostic-marker) elements on the same lines
+    // "hello" error and "x" warning should not be accompanied by "…" at the end of the line
+    // We can verify that the diagnostic markers only exist for "#eval" and "#check" lines
+    const diagnosticMarkers = page.locator("span.lean-diagnostic-marker");
+    const count = await diagnosticMarkers.count();
+    for (let i = 0; i < count; i++) {
+      const text = await diagnosticMarkers.nth(i).getAttribute("data-hover") || "";
+      // The marker tooltip should not contain "type mismatch" or "unused"
+      expect(text).not.toContain("type mismatch");
+      expect(text).not.toContain("unused");
+    }
+
+    // Hover over the error squiggly ("hello") and check tooltip content
+    const errorEl = errorSquigglies.first();
+    await errorEl.hover();
+    
+    let tooltip = page.locator(".lean-tooltip").first();
+    await expect(tooltip).toBeVisible();
+    let tooltipHtml = await tooltip.innerHTML();
+    expect(tooltipHtml).toContain("failed to synthesize instance");
+
+    // Move away
+    await page.locator("h1").hover();
+    await page.waitForTimeout(300);
+    await expect(page.locator(".lean-tooltip")).toHaveCount(0);
+
+    // Hover over the warning squiggly ("x")
+    const warningEl = warningSquigglies.first();
+    await warningEl.hover();
+
+    tooltip = page.locator(".lean-tooltip").first();
+    await expect(tooltip).toBeVisible();
+    tooltipHtml = await tooltip.innerHTML();
+
+    // It should contain the warning text
+    expect(tooltipHtml).toContain("unused");
+    // And because x has a type hover, it should also contain type info ("x :") separated by <hr>
+    expect(tooltipHtml).toContain("x :");
+    expect(tooltipHtml).toContain("<hr>");
+  });
 });

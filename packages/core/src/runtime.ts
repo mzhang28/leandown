@@ -81,7 +81,27 @@ export function leanHydrate(options: SetupOptions = {}) {
       left: "0",
       visibility: "hidden"
     });
-    tooltip.innerHTML = el.getAttribute("data-hover") || "";
+
+    const hovers: string[] = [];
+    let current: HTMLElement | null = el;
+    while (current) {
+      const hoverVal = current.getAttribute("data-hover");
+      if (hoverVal) {
+        hovers.push(hoverVal);
+      }
+      if (current.tagName === "PRE" || current.tagName === "BODY") {
+        break;
+      }
+      current = current.parentElement;
+    }
+
+    const uniqueHovers: string[] = [];
+    for (const h of hovers) {
+      if (h && !uniqueHovers.includes(h)) {
+        uniqueHovers.push(h);
+      }
+    }
+    tooltip.innerHTML = uniqueHovers.join("<hr>");
     document.body.appendChild(tooltip);
 
     let isMouseInHover = true;

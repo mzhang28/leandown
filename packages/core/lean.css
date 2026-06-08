@@ -33,6 +33,9 @@
 
   --lean-goal-marker: #0184bc;
   --lean-goal-marker-hover: #4078f2;
+
+  --lean-squiggly-error: #e45649;
+  --lean-squiggly-warning: #c18401;
 }
 
 :root[data-theme="dark"] {
@@ -68,6 +71,9 @@
 
   --lean-goal-marker: #56b6c2;
   --lean-goal-marker-hover: #61afef;
+
+  --lean-squiggly-error: #e06c75;
+  --lean-squiggly-warning: #e5c07b;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -104,6 +110,9 @@
 
     --lean-goal-marker: #56b6c2;
     --lean-goal-marker-hover: #61afef;
+
+    --lean-squiggly-error: #e06c75;
+    --lean-squiggly-warning: #e5c07b;
   }
 }
 
@@ -343,4 +352,47 @@ pre code.language-lean {
 }
 
 
+/* Squiggly underline annotations (error / warning)
+   Uses a repeating SVG tile for a tight, controlled wave amplitude.
+   Native CSS `wavy` amplitude is browser-controlled and too large. */
+.lean-squiggly-error,
+.lean-squiggly-warning {
+  cursor: pointer;
+  text-decoration: none;
+  padding-bottom: 2px;
+  background-repeat: repeat-x;
+  background-position: left bottom;
+  background-size: 4px 2px;
+}
+
+/* Light theme */
+.lean-squiggly-error {
+  background-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='4' height='2'><path d='M0 1.5 Q1 0.3 2 1.5 Q3 2.7 4 1.5' stroke='%23e45649' stroke-width='0.7' fill='none'/></svg>");
+}
+.lean-squiggly-warning {
+  background-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='4' height='2'><path d='M0 1.5 Q1 0.3 2 1.5 Q3 2.7 4 1.5' stroke='%23c18401' stroke-width='0.7' fill='none'/></svg>");
+}
+
+/* Dark theme ([data-theme="dark"]) */
+:root[data-theme="dark"] .lean-squiggly-error {
+  background-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='4' height='2'><path d='M0 1.5 Q1 0.3 2 1.5 Q3 2.7 4 1.5' stroke='%23e06c75' stroke-width='0.7' fill='none'/></svg>");
+}
+:root[data-theme="dark"] .lean-squiggly-warning {
+  background-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='4' height='2'><path d='M0 1.5 Q1 0.3 2 1.5 Q3 2.7 4 1.5' stroke='%23e5c07b' stroke-width='0.7' fill='none'/></svg>");
+}
+
+/* Dark theme (prefers-color-scheme) */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .lean-squiggly-error {
+    background-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='4' height='2'><path d='M0 1.5 Q1 0.3 2 1.5 Q3 2.7 4 1.5' stroke='%23e06c75' stroke-width='0.7' fill='none'/></svg>");
+  }
+  :root:not([data-theme="light"]) .lean-squiggly-warning {
+    background-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='4' height='2'><path d='M0 1.5 Q1 0.3 2 1.5 Q3 2.7 4 1.5' stroke='%23e5c07b' stroke-width='0.7' fill='none'/></svg>");
+  }
+}
+
+.lean-squiggly-error:hover,
+.lean-squiggly-warning:hover {
+  opacity: 0.85;
+}
 

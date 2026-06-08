@@ -57,4 +57,16 @@ Let's evaluate some expressions and check some types:
 #check "Hello"
 ```
 
+## Errors and Warnings
+
+Here is a Lean block with an error and a warning:
+
+```lean
+def badAdd : Nat := "hello" + 1
+
+def unusedWarning : Nat :=
+  let x := 5
+  10
+```
+
 
