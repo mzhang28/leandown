@@ -58,14 +58,14 @@ export default function remarkLean(options: RemarkLeanOptions) {
         syncHovers
       }));
 
-      let highlighted = getCachedHighlight(cacheKey, options.cacheDir);
+      let highlighted = await getCachedHighlight(cacheKey, options.cacheDir);
 
       if (!highlighted) {
         highlighted = await client.highlight(node.value, {
           synchronizedHovers: syncHovers,
           prependCode: cumulativeContent
         });
-        setCachedHighlight(cacheKey, highlighted, options.cacheDir);
+        await setCachedHighlight(cacheKey, highlighted, options.cacheDir);
       }
 
       cumulativeContent += node.value + "\n\n";

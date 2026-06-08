@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { Database } from "bun:sqlite";
+import { createClient, type Client } from "@libsql/client";
 
 export const CACHE_VERSION = "v3-permalinks";
 
@@ -9,9 +9,10 @@ export function hashContent(content: string): string {
   return crypto.createHash("sha256").update(content).digest("hex");
 }
 
-const dbMap = new Map<string, Database>();
+const dbMap = new Map<string, Client>();
+const dbInitMap = new Map<string, Promise<void>>();
 
-function getDatabase(customCacheDir?: string): Database {
+function getDatabase(customCacheDir?: string): Client {
   const cacheDir = customCacheDir
     ? path.resolve(process.cwd(), customCacheDir)
     : path.resolve(process.cwd(), "node_modules", ".cache", "remark-lean");
@@ -21,24 +22,53 @@ function getDatabase(customCacheDir?: string): Database {
   }
 
   const dbPath = path.join(cacheDir, "cache.db");
+  const dbUrl = `file:${dbPath}`;
   
   let db = dbMap.get(dbPath);
   if (!db) {
-    db = new Database(dbPath);
-    db.run("PRAGMA journal_mode = WAL;");
-    db.run("CREATE TABLE IF NOT EXISTS highlight_cache (key TEXT PRIMARY KEY, html TEXT);");
+    db = createClient({ url: dbUrl });
     dbMap.set(dbPath, db);
   }
   return db;
 }
 
-export function getCachedHighlight(hash: string, customCacheDir?: string): string | null {
+async function ensureDatabaseInitialized(customCacheDir?: string): Promise<Client> {
+  const cacheDir = customCacheDir
+    ? path.resolve(process.cwd(), customCacheDir)
+    : path.resolve(process.cwd(), "node_modules", ".cache", "remark-lean");
+  const dbPath = path.join(cacheDir, "cache.db");
+
   const db = getDatabase(customCacheDir);
-  const row = db.query("SELECT html FROM highlight_cache WHERE key = $key").get({ $key: hash }) as { html: string } | null;
-  return row ? row.html : null;
+
+  let initPromise = dbInitMap.get(dbPath);
+  if (!initPromise) {
+    initPromise = (async () => {
+      await db.execute("PRAGMA journal_mode = WAL;");
+      await db.execute("CREATE TABLE IF NOT EXISTS highlight_cache (key TEXT PRIMARY KEY, html TEXT);");
+    })();
+    dbInitMap.set(dbPath, initPromise);
+  }
+  await initPromise;
+  return db;
 }
 
-export function setCachedHighlight(hash: string, html: string, customCacheDir?: string) {
-  const db = getDatabase(customCacheDir);
-  db.query("INSERT OR REPLACE INTO highlight_cache (key, html) VALUES ($key, $html)").run({ $key: hash, $html: html });
+export async function getCachedHighlight(hash: string, customCacheDir?: string): Promise<string | null> {
+  const db = await ensureDatabaseInitialized(customCacheDir);
+  const result = await db.execute({
+    sql: "SELECT html FROM highlight_cache WHERE key = ?",
+    args: [hash]
+  });
+  const row = result.rows[0];
+  if (row) {
+    return row.html as string;
+  }
+  return null;
+}
+
+export async function setCachedHighlight(hash: string, html: string, customCacheDir?: string): Promise<void> {
+  const db = await ensureDatabaseInitialized(customCacheDir);
+  await db.execute({
+    sql: "INSERT OR REPLACE INTO highlight_cache (key, html) VALUES (?, ?)",
+    args: [hash, html]
+  });
 }

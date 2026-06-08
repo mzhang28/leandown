@@ -55,6 +55,7 @@
   },
   "dependencies": {
     "@floating-ui/dom": "^1.7.6",
+    "@libsql/client": "^0.17.3",
     "escape-html": "^1.0.3",
     "remark": "^15.0.1",
     "remark-html": "^16.0.1"
