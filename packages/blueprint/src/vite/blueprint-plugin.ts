@@ -4,7 +4,16 @@ import remarkHtml from "remark-html";
 import remarkLean from "@leandown/remark";
 import { processDirectives } from "../plugin/index.ts";
 import { findProjectRoot, readConfig } from "../util.ts";
+import { parseSummary } from "./summary.ts";
 import path from "node:path";
+import fs from "node:fs";
+
+const SUMMARY_MODULE = "@leandown/blueprint/summary";
+// \0 prefix marks it as virtual — Vite/Rollup never look for this on disk.
+// We can't use SUMMARY_MODULE itself as the resolved ID because Vite checks the
+// package exports map before calling resolveId for package subpath imports.
+// The alias in the config hook redirects the import before that lookup happens.
+const RESOLVED_SUMMARY_MODULE = "\0blueprint-summary";
 
 export interface BlueprintVitePluginOptions {
   /** Lean project path for LSP highlighting (default: auto-detect from blueprint.json) */
@@ -31,6 +40,32 @@ export function blueprintVitePlugin(
 
   return {
     name: "leandown-blueprint",
+
+    config() {
+      return {
+        resolve: {
+          alias: [{ find: SUMMARY_MODULE, replacement: RESOLVED_SUMMARY_MODULE }],
+        },
+        optimizeDeps: {
+          exclude: [SUMMARY_MODULE],
+        },
+      };
+    },
+
+    resolveId(id: string) {
+      if (id === RESOLVED_SUMMARY_MODULE) return RESOLVED_SUMMARY_MODULE;
+    },
+
+    load(id: string) {
+      if (id !== RESOLVED_SUMMARY_MODULE || !resolvedRoot) return;
+      const summaryPath = path.join(resolvedRoot, "src", "SUMMARY.md");
+      if (fs.existsSync(summaryPath)) {
+        this.addWatchFile(summaryPath);
+        const summary = parseSummary(fs.readFileSync(summaryPath, "utf-8"));
+        return `export const summary = ${JSON.stringify(summary)};`;
+      }
+      return `export const summary = [];`;
+    },
 
     configResolved(config) {
       // Use explicit root or detect from Vite's root

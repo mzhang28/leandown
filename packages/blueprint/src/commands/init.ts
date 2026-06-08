@@ -86,9 +86,11 @@ export async function initCommand(options: InitOptions): Promise<void> {
     path.join(targetDir, "src", "index.md"),
     replacements
   );
-
-  // Create chapters directory
-  fs.mkdirSync(path.join(targetDir, "src", "chapters"), { recursive: true });
+  copyTemplate(
+    "SUMMARY.md",
+    path.join(targetDir, "src", "SUMMARY.md"),
+    replacements
+  );
 
   // Create lean directory
   fs.mkdirSync(path.join(targetDir, "lean"), { recursive: true });
@@ -142,7 +144,7 @@ export default defineConfig({
   console.log(`  src/main.ts`);
   console.log(`  src/style.css`);
   console.log(`  src/index.md`);
-  console.log(`  src/chapters/`);
+  console.log(`  src/SUMMARY.md`);
   console.log(`  lean/`);
   console.log();
   console.log("Next steps:");

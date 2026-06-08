@@ -5,6 +5,7 @@
     "changeset": "changeset",
     "version-packages": "changeset version && bun run fix-workspace-deps",
     "fix-workspace-deps": "node scripts/fix-workspace-deps.mjs",
+    "pack-local": "node scripts/pack-local.mjs",
     "release": "node scripts/publish-packages.mjs"
   },
   "devDependencies": {

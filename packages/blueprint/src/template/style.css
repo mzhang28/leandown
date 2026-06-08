@@ -1,15 +1,79 @@
-/* Blueprint base styles */
-body {
+/* ── Layout ─────────────────────────────────────────────────────────────── */
+
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
   font-family: system-ui, -apple-system, sans-serif;
   line-height: 1.6;
-  max-width: 48rem;
-  margin: 2rem auto;
-  padding: 0 1rem;
   color: #1a1a1a;
   background: #fafafa;
 }
 
-/* Blueprint nodes */
+#shell {
+  display: grid;
+  grid-template-columns: 16rem 1fr;
+  min-height: 100vh;
+}
+
+/* ── Sidebar ─────────────────────────────────────────────────────────────── */
+
+#sidebar {
+  background: #f4f4f5;
+  border-right: 1px solid #e5e5e7;
+  padding: 1.5rem 1rem;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+  box-sizing: border-box;
+}
+
+.nav-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.nav-depth-0 > li {
+  margin-bottom: 0.125rem;
+}
+
+.nav-depth-1, .nav-depth-2 {
+  padding-left: 1rem;
+  margin-top: 0.125rem;
+}
+
+.nav-link {
+  display: block;
+  padding: 0.3rem 0.6rem;
+  border-radius: 5px;
+  text-decoration: none;
+  color: #444;
+  font-size: 0.9rem;
+  transition: background 0.1s, color 0.1s;
+}
+
+.nav-link:hover {
+  background: #e9e9eb;
+  color: #111;
+}
+
+.nav-link.active {
+  background: #dce6fb;
+  color: #2452c7;
+  font-weight: 500;
+}
+
+/* ── Content ─────────────────────────────────────────────────────────────── */
+
+#content {
+  padding: 2rem 3rem;
+  max-width: 48rem;
+}
+
+/* ── Blueprint nodes ─────────────────────────────────────────────────────── */
+
 .blueprint-node {
   margin: 1.5rem 0;
   padding: 1rem 1.25rem;
@@ -18,19 +82,16 @@ body {
   background: #fff;
 }
 
-.blueprint-node--theorem { border-left-color: #5b7fdb; }
+.blueprint-node--theorem    { border-left-color: #5b7fdb; }
 .blueprint-node--definition { border-left-color: #60a64c; }
-.blueprint-node--lemma { border-left-color: #b8860b; }
-.blueprint-node--proof {
-  border-left-color: #888;
-  border-left-style: dashed;
-}
+.blueprint-node--lemma      { border-left-color: #b8860b; }
+.blueprint-node--proof      { border-left-color: #888; border-left-style: dashed; }
 .blueprint-node--proposition { border-left-color: #9b59b6; }
-.blueprint-node--corollary { border-left-color: #2e8190; }
-.blueprint-node--example { border-left-color: #e67e22; }
+.blueprint-node--corollary  { border-left-color: #2e8190; }
+.blueprint-node--example    { border-left-color: #e67e22; }
 .blueprint-node--conjecture { border-left-color: #c0392b; }
-.blueprint-node--remark { border-left-color: #7f8c8d; }
-.blueprint-node--note { border-left-color: #95a5a6; }
+.blueprint-node--remark     { border-left-color: #7f8c8d; }
+.blueprint-node--note       { border-left-color: #95a5a6; }
 
 .blueprint-header {
   display: flex;
@@ -71,25 +132,9 @@ body {
   cursor: default;
 }
 
-.blueprint-chip--lean {
-  background: #e8f4fd;
-  color: #2471a3;
-}
+.blueprint-chip--lean  { background: #e8f4fd; color: #2471a3; }
+.blueprint-chip--uses  { background: #fef3e0; color: #b8860b; }
+.blueprint-chip--owner { background: #f0e6f6; color: #7d3c98; }
 
-.blueprint-chip--uses {
-  background: #fef3e0;
-  color: #b8860b;
-}
-
-.blueprint-chip--owner {
-  background: #f0e6f6;
-  color: #7d3c98;
-}
-
-.blueprint-content > :first-child {
-  margin-top: 0;
-}
-
-.blueprint-content > :last-child {
-  margin-bottom: 0;
-}
+.blueprint-content > :first-child { margin-top: 0; }
+.blueprint-content > :last-child  { margin-bottom: 0; }
