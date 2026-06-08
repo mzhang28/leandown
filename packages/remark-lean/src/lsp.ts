@@ -24,6 +24,7 @@ export class LeanLSPClient {
   private nextRequestId = 1;
   private pendingRequests = new Map<number, (res: any) => void>();
   private compileWaiters = new Map<string, () => void>();
+  private diagnosticsMap = new Map<string, any[]>();
   private legend: string[] = [];
   private cwd: string;
 
@@ -313,11 +314,55 @@ export class LeanLSPClient {
       }
     }
 
+    const diagnostics = this.diagnosticsMap.get(tempFileUri) || [];
+    this.diagnosticsMap.delete(tempFileUri);
+
+    const localDiagnostics = diagnostics.filter(d => {
+      const line = d.range.start.line - prependLines;
+      return line >= 0 && line < lines.length;
+    });
+
+    const diagnosticsByLine = new Map<number, any[]>();
+    for (const d of localDiagnostics) {
+      const lineIndex = d.range.start.line - prependLines;
+      if (!diagnosticsByLine.has(lineIndex)) {
+        diagnosticsByLine.set(lineIndex, []);
+      }
+      diagnosticsByLine.get(lineIndex)!.push(d);
+    }
+
+    const lineDiagnostics = new Map<number, DiagnosticPosition[]>();
+    if (options.synchronizedHovers) {
+      for (const [lineIndex, diags] of diagnosticsByLine.entries()) {
+        const lineText = lines[lineIndex] || "";
+        const pos = lineText.length;
+
+        // Determine highest severity
+        const highestSeverity = Math.min(...diags.map(d => d.severity));
+
+        // Combine messages
+        const combinedMessage = diags.map(d => d.message).join("\n\n---\n\n");
+
+        const markdownMessage = "```lean\n" + combinedMessage + "\n```";
+        const compiled = await remark().use(remarkHtml).process(markdownMessage);
+        const targetBlankHtml = addTargetBlank(String(compiled).trim());
+        const finalHtml = highlightGoalHtml(targetBlankHtml, wordMap);
+
+        lineDiagnostics.set(lineIndex, [{
+          character: pos,
+          severity: highestSeverity,
+          message: combinedMessage,
+          compiledHtml: finalHtml
+        }]);
+      }
+    }
+
     const highlightedLines = lines.map((lineText, lineIndex) => {
       const lineTokens = tokens.filter((t) => t.line === lineIndex);
 
       const goals = lineGoals.get(lineIndex) || [];
-      const events = createAndSortLineEvents(lineTokens, goals);
+      const diags = lineDiagnostics.get(lineIndex) || [];
+      const events = createAndSortLineEvents(lineTokens, goals, diags);
 
       let html = "";
       let lastIndex = 0;
@@ -344,7 +389,11 @@ export class LeanLSPClient {
           html += `</span>`;
         } else if (event.kind === 'goal') {
           const goal = event.data;
-          html += `<span class="lean-goal-marker" data-hover="${escapeHtml(goal.compiledHtml)}">⊢</span>`;
+          html += `<span class="lean-goal-marker" data-hover="${escapeHtml(goal.compiledHtml)}">…</span>`;
+        } else if (event.kind === 'diagnostic') {
+          const diag = event.data;
+          const severityClass = diag.severity === 1 ? "lean-diagnostic-error" : diag.severity === 2 ? "lean-diagnostic-warning" : "lean-diagnostic-info";
+          html += `<span class="lean-diagnostic-marker ${severityClass}" data-hover="${escapeHtml(diag.compiledHtml)}">…</span>`;
         }
       }
 
@@ -429,6 +478,9 @@ export class LeanLSPClient {
               resolveFn();
             }
           }
+        } else if (msg.method === "textDocument/publishDiagnostics") {
+          const { uri, diagnostics } = msg.params;
+          this.diagnosticsMap.set(uri, diagnostics);
         }
       } catch (e) {
         console.error("Error parsing LSP message", e);
@@ -661,7 +713,7 @@ export interface GoalPosition {
  */
 export interface LineEvent {
   index: number;
-  kind: 'start' | 'end' | 'goal';
+  kind: 'start' | 'end' | 'goal' | 'diagnostic';
   data: any;
   length?: number;
   id?: number;
@@ -806,9 +858,17 @@ export function getGoalQueryPositions(lineText: string): number[] {
  * This merges tokens and goal positions into a unified list of formatting events sorted
  * sequentially by index, ensuring HTML tag nesting matches the overlapping structure.
  */
+export interface DiagnosticPosition {
+  character: number;
+  severity: number;
+  message: string;
+  compiledHtml: string;
+}
+
 export function createAndSortLineEvents(
   lineTokens: Token[],
-  goals: GoalPosition[]
+  goals: GoalPosition[],
+  diagnostics: DiagnosticPosition[] = []
 ): LineEvent[] {
   const events: LineEvent[] = [];
 
@@ -822,11 +882,16 @@ export function createAndSortLineEvents(
     events.push({ index: goal.character, kind: 'goal', data: goal });
   }
 
+  for (const diag of diagnostics) {
+    events.push({ index: diag.character, kind: 'diagnostic', data: diag });
+  }
+
   events.sort((a, b) => {
     if (a.index !== b.index) return a.index - b.index;
     
-    if (a.kind === 'goal' && b.kind !== 'goal') return -1;
-    if (b.kind === 'goal' && a.kind !== 'goal') return 1;
+    const isMarker = (k: string) => k === 'goal' || k === 'diagnostic';
+    if (isMarker(a.kind) && !isMarker(b.kind)) return -1;
+    if (isMarker(b.kind) && !isMarker(a.kind)) return 1;
 
     if (a.kind === 'end' && b.kind === 'start') return -1;
     if (a.kind === 'start' && b.kind === 'end') return 1;

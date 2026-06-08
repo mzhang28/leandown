@@ -300,4 +300,47 @@ pre code.language-lean {
   transform: scale(1.2);
 }
 
+/* Diagnostic Marker styling */
+.lean-diagnostic-marker {
+  display: inline-block;
+  margin-left: 10px;
+  font-weight: bold;
+  cursor: pointer;
+  opacity: 0.5;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+  user-select: none;
+}
+
+.lean-diagnostic-marker:hover {
+  opacity: 1;
+  transform: scale(1.2);
+}
+
+.lean-diagnostic-info {
+  color: var(--lean-goal-marker);
+}
+
+.lean-diagnostic-info:hover {
+  color: var(--lean-goal-marker-hover);
+}
+
+.lean-diagnostic-warning {
+  color: var(--lean-property);
+}
+
+.lean-diagnostic-warning:hover {
+  color: var(--lean-property);
+  opacity: 1;
+}
+
+.lean-diagnostic-error {
+  color: var(--lean-sorry);
+}
+
+.lean-diagnostic-error:hover {
+  color: var(--lean-sorry);
+  opacity: 1;
+}
+
+
 

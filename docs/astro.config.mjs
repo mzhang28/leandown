@@ -15,7 +15,7 @@ export default defineConfig({
   },
   integrations: [
     starlight({
-      title: 'My Docs',
+      title: 'remark-lean',
       social: [{ icon: 'github', label: 'GitHub', href: 'https://github.com/mzhang28/remark-lean' }],
       sidebar: [
         { label: 'Overview', 
@@ -27,6 +27,7 @@ export default defineConfig({
         {
           label: 'Examples',
           items: [
+            { label: 'Basic', slug: 'basic' },
             { label: 'STLC', slug: 'stlc' },
           ],
         },
@@ -40,4 +41,7 @@ export default defineConfig({
       }
     }),
   ],
+  server: {
+    allowedHosts: ["ephemeral"]
+  },
 });

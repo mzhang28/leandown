@@ -47,3 +47,14 @@ const message = "Hello, JavaScript!";
 console.log(message);
 ```
 
+## Basic Functionality
+
+Let's evaluate some expressions and check some types:
+
+```lean
+#eval 1 + 1
+#check Nat.add
+#check "Hello"
+```
+
+

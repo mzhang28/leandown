@@ -128,7 +128,7 @@ test.describe("Lean Markdown Renderer E2E Tests", () => {
     await expect(page.locator(".lean-tooltip")).toHaveCount(0);
   });
 
-  test("should display goal state when hovering over proof state markers (⊢)", async ({ page }) => {
+  test("should display goal state when hovering over proof state markers (…)", async ({ page }) => {
     const goalMarkers = page.locator("span.lean-goal-marker");
     await expect(goalMarkers.first()).toBeVisible();
 
@@ -372,6 +372,26 @@ test.describe("Lean Markdown Renderer E2E Tests", () => {
     await page.waitForTimeout(350);
 
     // Verify all tooltips are closed
+    await expect(page.locator(".lean-tooltip")).toHaveCount(0);
+  });
+
+  test("should display diagnostic info when hovering over diagnostic markers (…)", async ({ page }) => {
+    const diagnosticMarkers = page.locator("span.lean-diagnostic-marker");
+    await expect(diagnosticMarkers.first()).toBeVisible();
+    await expect(await diagnosticMarkers.count()).toBeGreaterThan(0);
+
+    const firstDiag = diagnosticMarkers.first();
+    await firstDiag.hover();
+
+    const tooltip = page.locator(".lean-tooltip").first();
+    await expect(tooltip).toBeVisible();
+
+    const tooltipText = await tooltip.innerText();
+    expect(tooltipText).toMatch(/(2|Nat.add : Nat → Nat → Nat|"Hello" : String)/);
+
+    // Moving away closes the tooltip
+    await page.locator("h1").hover();
+    await page.waitForTimeout(400);
     await expect(page.locator(".lean-tooltip")).toHaveCount(0);
   });
 });
