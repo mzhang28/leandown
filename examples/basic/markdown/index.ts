@@ -18,7 +18,7 @@ async function startServer() {
       port: defaultPort,
       host: "0.0.0.0",
       allowedHosts: ["ephemeral"],
-      strictPort: false
+      strictPort: true
     },
     plugins: [
       {

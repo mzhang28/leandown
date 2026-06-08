@@ -1,6 +1,9 @@
 import { defineConfig, devices } from "@playwright/test";
 import path from "node:path";
 
+const workerIndex = parseInt(process.env.STRYKER_SANDBOX_WORKER_INDEX || "0", 10);
+const port = 5173 + workerIndex;
+
 export default defineConfig({
   testDir: ".",
   fullyParallel: true,
@@ -9,7 +12,7 @@ export default defineConfig({
   reporter: "list",
   outputDir: "../test-results",
   use: {
-    baseURL: "http://localhost:5173",
+    baseURL: `http://localhost:${port}`,
     trace: "on-first-retry",
   },
   projects: [
@@ -23,11 +26,13 @@ export default defineConfig({
   ],
   webServer: {
     command: "bun --cwd ../examples/basic/markdown index.ts",
-    url: "http://localhost:5173",
+    url: `http://localhost:${port}`,
     reuseExistingServer: true,
     timeout: 120000,
     env: {
+      PORT: port.toString(),
       REMARK_LEAN_CACHE_DIR: path.resolve(__dirname, "../test-results/.cache"),
     },
   },
 });
+

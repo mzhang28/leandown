@@ -1,0 +1,26 @@
+{
+  "$schema": "https://schema.stryker-mutator.io/bind/stryker-schema.json",
+  "mutate": [
+    "packages/remark-lean/src/**/*.ts",
+    "!packages/remark-lean/src/**/*.d.ts"
+  ],
+  "testRunner": "command",
+  "commandRunner": {
+    "command": "bun run test:e2e"
+  },
+  "concurrency": 12,
+  "incremental": true,
+  "checkers": [
+    "typescript"
+  ],
+  "plugins": [
+    "@stryker-mutator/typescript-checker"
+  ],
+  "tsconfigFile": "packages/remark-lean/tsconfig.json",
+  "reporters": [
+    "html",
+    "clear-text",
+    "progress"
+  ],
+  "tempDirName": ".stryker-tmp"
+}

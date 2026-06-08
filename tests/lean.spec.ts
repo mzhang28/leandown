@@ -89,7 +89,7 @@ test.describe("Lean Markdown Renderer E2E Tests", () => {
     }
   });
 
-  test("should show tooltip on hover and support nested/stacked tooltips", async ({ page }) => {
+  test("should show tooltip on hover and support nested/stacked tooltips with mouse transition", async ({ page }) => {
     const hoverable = page.locator("[data-hover]").first();
     await expect(hoverable).toBeVisible();
 
@@ -113,8 +113,13 @@ test.describe("Lean Markdown Renderer E2E Tests", () => {
       const allTooltips = page.locator(".lean-tooltip");
       await expect(allTooltips).toHaveCount(2);
 
-      // Parent tooltip stays open (stack-based controller)
-      await expect(tooltip).toBeVisible();
+      // Hover over the nested child tooltip itself (moving mouse out of parent tooltip trigger/bounds)
+      await allTooltips.nth(1).hover();
+      await page.waitForTimeout(300); // Wait for potential hide timers to fire
+
+      // Both tooltips must remain visible
+      await expect(allTooltips.nth(0)).toBeVisible();
+      await expect(allTooltips.nth(1)).toBeVisible();
     }
 
     // Moving away closes all tooltips
@@ -218,5 +223,71 @@ test.describe("Lean Markdown Renderer E2E Tests", () => {
     // The definition should get flashed
     await expect(setDef).toHaveClass(/lean-flash/);
   });
+
+  test("should render and hydrate nested lean code blocks inside blockquotes", async ({ page }) => {
+    // Find a code block inside a blockquote
+    const nestedCodeBlock = page.locator("blockquote pre code.language-lean");
+    await expect(nestedCodeBlock).toBeVisible();
+
+    // Verify it is highlighted
+    const keywords = nestedCodeBlock.locator(".lean-keyword");
+    await expect(keywords.first()).toBeVisible();
+    await expect(await keywords.first().innerText()).toMatch(/^(def|instance|theorem|by|constructor|simp|grind|where|mem)$/);
+
+    const variables = nestedCodeBlock.locator(".lean-variable");
+    await expect(variables.first()).toBeVisible();
+
+    // Verify hovers inside the nested block work
+    const hoverable = nestedCodeBlock.locator("[data-hover]").first();
+    await expect(hoverable).toBeVisible();
+    await hoverable.hover();
+
+    const tooltip = page.locator(".lean-tooltip").first();
+    await expect(tooltip).toBeVisible();
+    await expectTooltipNear(tooltip, hoverable);
+  });
+
+  test("should not format or highlight non-lean code blocks", async ({ page }) => {
+    // Find the JavaScript code block
+    const jsCodeBlock = page.locator("pre code.language-javascript");
+    await expect(jsCodeBlock).toBeVisible();
+
+    // Verify it doesn't have any Lean-specific classes or attributes
+    const leanKeywords = jsCodeBlock.locator(".lean-keyword");
+    const leanVariables = jsCodeBlock.locator(".lean-variable");
+    const leanHoverables = jsCodeBlock.locator("[data-hover]");
+    
+    await expect(leanKeywords).toHaveCount(0);
+    await expect(leanVariables).toHaveCount(0);
+    await expect(leanHoverables).toHaveCount(0);
+  });
+
+  test("should respect hover debounce and cancel pending tooltip if mouse leaves early", async ({ page }) => {
+    const hoverable = page.locator("[data-hover]").first();
+    await expect(hoverable).toBeVisible();
+
+    // 1. Move mouse to hoverable but leave quickly (before 500ms debounce threshold)
+    await hoverable.hover();
+    await page.waitForTimeout(150);
+    
+    // Move away to h1
+    await page.locator("h1").hover();
+    
+    // Wait for the rest of the 500ms window + some padding (e.g. 500ms total from move away)
+    await page.waitForTimeout(500);
+
+    // Verify no tooltip is created/visible
+    const tooltipsCount = await page.locator(".lean-tooltip").count();
+    expect(tooltipsCount).toBe(0);
+
+    // 2. Move mouse back and wait long enough (e.g. 700ms)
+    await hoverable.hover();
+    await page.waitForTimeout(700);
+
+    // Verify tooltip is now visible
+    const tooltip = page.locator(".lean-tooltip").first();
+    await expect(tooltip).toBeVisible();
+  });
 });
+
 

@@ -33,3 +33,17 @@ theorem cantor (f : S → Set S) : ¬ Surjective f := by
     grind
   grind
 ```
+
+> A nested code block in a blockquote:
+>
+> ```lean
+> def nestedHello (name : String) : String := "Nested " ++ name
+> ```
+
+Here is a non-Lean code block to ensure it is ignored by remark-lean:
+
+```javascript
+const message = "Hello, JavaScript!";
+console.log(message);
+```
+

@@ -43,3 +43,7 @@ test-results/
 playwright-report/
 blob-report/
 playwright/.local-browsers
+
+.stryker-tmp
+reports/mutation/mutation.html
+reports/stryker-incremental.json
