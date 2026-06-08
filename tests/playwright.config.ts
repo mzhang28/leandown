@@ -3,10 +3,9 @@ import path from "node:path";
 
 export default defineConfig({
   testDir: ".",
-  fullyParallel: false,
+  fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
-  workers: 1, // Running sequentially to avoid file/LSP lock contentions if any
   reporter: "list",
   outputDir: "../test-results",
   use: {
