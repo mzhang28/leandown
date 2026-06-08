@@ -1,9 +1,10 @@
 ---
 title: Basic Examples
-description: Demonstrating basic functionality of remark-lean, including interactive goal states and LSP diagnostics.
+description: Demonstrating basic functionality of @leandown/remark, including interactive goal states and LSP diagnostics.
 ---
 
-This page demonstrates the core features of `remark-lean` in action.
+This page demonstrates the core features of `@leandown/remark` in action.
+
 
 ## Interactive Proof States
 

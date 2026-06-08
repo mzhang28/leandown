@@ -6,7 +6,7 @@ on:
       - main
     paths:
       - 'docs/**'
-      - 'packages/remark-lean/**'
+      - 'packages/**'
       - 'examples/basic/lean/**'
       - '.github/workflows/deploy-docs.yml'
   workflow_dispatch:
@@ -45,8 +45,12 @@ jobs:
       - name: Install root workspace dependencies
         run: bun install --frozen-lockfile
 
-      - name: Build remark-lean package
-        working-directory: packages/remark-lean
+      - name: Build core package
+        working-directory: packages/core
+        run: bun run build
+
+      - name: Build remark package
+        working-directory: packages/remark
         run: bun run build
 
       - name: Build Lean project
