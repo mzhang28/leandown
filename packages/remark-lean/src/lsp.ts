@@ -4,6 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { remark } from "remark";
 import remarkHtml from "remark-html";
+import escapeHtml from "escape-html";
 
 export interface Token {
   line: number;
@@ -110,63 +111,13 @@ export class LeanLSPClient {
     });
 
     const data: number[] = tokensRes.result?.data || [];
-    const tokens: Token[] = [];
-    let currentLine = 0;
-    let currentCol = 0;
-
-    for (let i = 0; i < data.length; i += 5) {
-      const deltaLine = data[i]!;
-      const deltaStartChar = data[i + 1]!;
-      const length = data[i + 2]!;
-      const tokenTypeIndex = data[i + 3]!;
-      
-      currentLine += deltaLine;
-      if (deltaLine > 0) {
-        currentCol = deltaStartChar;
-      } else {
-        currentCol += deltaStartChar;
-      }
-
-      const type = this.legend[tokenTypeIndex] || "variable";
-      if (currentLine >= prependLines) {
-        tokens.push({
-          line: currentLine - prependLines,
-          start: currentCol,
-          length,
-          type
-        });
-      }
-    }
+    const tokens = parseSemanticTokens(data, this.legend, prependLines);
 
     const lines = content.split("\n");
 
     if (options.synchronizedHovers) {
       const tempFileName = tempFileUri.split("/").pop();
-      const tokenizeRegex = /[a-zA-Z_α-ωΑ-Ω0-9']+|[^\s]/g;
-
-      interface QueryToken {
-        line: number;
-        startChar: number;
-        length: number;
-        word: string;
-      }
-
-      const queryTokens: QueryToken[] = [];
-      for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
-        const lineText = lines[lineIndex];
-        if (!lineText) continue;
-
-        let match;
-        tokenizeRegex.lastIndex = 0;
-        while ((match = tokenizeRegex.exec(lineText)) !== null) {
-          queryTokens.push({
-            line: lineIndex,
-            startChar: match.index,
-            length: match[0].length,
-            word: match[0]
-          });
-        }
-      }
+      const queryTokens = extractQueryTokens(lines);
 
       const results = await Promise.all(
         queryTokens.map(async (qt) => {
@@ -256,26 +207,7 @@ export class LeanLSPClient {
       }
 
 
-      const uniqueTokens: DiscoveredToken[] = [];
-      for (const d of discovered) {
-        const existing = uniqueTokens.find(u => 
-          u.startLine === d.startLine && u.startChar === d.startChar &&
-          u.endLine === d.endLine && u.endChar === d.endChar
-        );
-        if (existing) {
-          if (!existing.hoverText && d.hoverText) existing.hoverText = d.hoverText;
-          if (!existing.defUri && d.defUri) {
-            existing.defUri = d.defUri;
-            existing.defLine = d.defLine;
-            existing.defChar = d.defChar;
-          }
-          if (!existing.permalink && d.permalink) {
-            existing.permalink = d.permalink;
-          }
-        } else {
-          uniqueTokens.push(d);
-        }
-      }
+      const uniqueTokens = deduplicateDiscoveredTokens(discovered);
 
 
       for (const u of uniqueTokens) {
@@ -346,10 +278,6 @@ export class LeanLSPClient {
 
       this.currentWordMap = wordMap;
     }
-    interface GoalPosition {
-      character: number;
-      compiledHtml: string;
-    }
     const lineGoals = new Map<number, GoalPosition[]>();
     if (options.synchronizedHovers) {
       for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
@@ -357,29 +285,7 @@ export class LeanLSPClient {
         if (!lineText.trim()) continue;
 
         // Find all query positions for this line
-        let cleanText = lineText;
-        const commentIndex = cleanText.indexOf("--");
-        if (commentIndex !== -1) {
-          cleanText = cleanText.substring(0, commentIndex);
-        }
-        cleanText = cleanText.trimEnd();
-
-        const positions: number[] = [];
-        const regex = /<;>|;/g;
-        let match;
-        while ((match = regex.exec(cleanText)) !== null) {
-          let pos = match.index;
-          while (pos > 0 && /\s/.test(cleanText[pos - 1]!)) {
-            pos--;
-          }
-          if (pos > 0 && !positions.includes(pos)) {
-            positions.push(pos);
-          }
-        }
-
-        if (!cleanText.endsWith("<;>") && !cleanText.endsWith(";")) {
-          positions.push(cleanText.length);
-        }
+        const positions = getGoalQueryPositions(lineText);
 
         const rawGoalsList = await Promise.all(
           positions.map(async (pos) => {
@@ -414,39 +320,8 @@ export class LeanLSPClient {
     const highlightedLines = lines.map((lineText, lineIndex) => {
       const lineTokens = tokens.filter((t) => t.line === lineIndex);
 
-      const events: { index: number; kind: 'start' | 'end' | 'goal'; data: any; length?: number; id?: number }[] = [];
-
-      for (let i = 0; i < lineTokens.length; i++) {
-        const token = lineTokens[i]!;
-        events.push({ index: token.start, kind: 'start', data: token, length: token.length, id: i });
-        events.push({ index: token.start + token.length, kind: 'end', data: token, length: token.length, id: i });
-      }
-
       const goals = lineGoals.get(lineIndex) || [];
-      for (const goal of goals) {
-        events.push({ index: goal.character, kind: 'goal', data: goal });
-      }
-
-      events.sort((a, b) => {
-        if (a.index !== b.index) return a.index - b.index;
-        
-        if (a.kind === 'goal' && b.kind !== 'goal') return -1;
-        if (b.kind === 'goal' && a.kind !== 'goal') return 1;
-
-        if (a.kind === 'end' && b.kind === 'start') return -1;
-        if (a.kind === 'start' && b.kind === 'end') return 1;
-
-        if (a.kind === 'start' && b.kind === 'start') {
-          if (a.length !== b.length) return b.length! - a.length!;
-          return a.id! - b.id!;
-        }
-        if (a.kind === 'end' && b.kind === 'end') {
-          if (a.length !== b.length) return a.length! - b.length!;
-          return b.id! - a.id!;
-        }
-
-        return 0;
-      });
+      const events = createAndSortLineEvents(lineTokens, goals);
 
       let html = "";
       let lastIndex = 0;
@@ -566,14 +441,6 @@ export class LeanLSPClient {
   }
 }
 
-function escapeHtml(str: string): string {
-  return str
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
-}
 
 function hashString(str: string): string {
   let hash = 0;
@@ -746,6 +613,241 @@ function getPermalinkForUri(uri: string, line: number): string | undefined {
     // If any git command fails, just ignore and return undefined
   }
   return undefined;
+}
+
+/**
+ * Represents a token extracted from a code line for querying LSP information.
+ *
+ * This holds the word text itself, its 0-indexed line number, its starting character
+ * position, and its length within that line.
+ */
+export interface QueryToken {
+  line: number;
+  startChar: number;
+  length: number;
+  word: string;
+}
+
+/**
+ * Represents a token containing hover and definition data discovered from LSP queries.
+ *
+ * It contains coordinates of the token's span, target definition location (URI, line, char),
+ * processed markdown hover text, and optional git-backed permalink.
+ */
+export interface DiscoveredToken {
+  startLine: number;
+  startChar: number;
+  endLine: number;
+  endChar: number;
+  defUri: string | null;
+  defLine: number | null;
+  defChar: number | null;
+  hoverText: string;
+  permalink?: string;
+}
+
+/**
+ * Represents the proof state/goal text at a specific character position on a line.
+ *
+ * It maps a specific character offset on a line to its compiled/rendered HTML representation of
+ * the Lean proof state (the goals) at that point.
+ */
+export interface GoalPosition {
+  character: number;
+  compiledHtml: string;
+}
+
+/**
+ * Represents a formatting event (start span, end span, or goal marker) on a highlighted line.
+ *
+ * These events are used to reconstruct a line's HTML structure dynamically by tracking index,
+ * tag kind, and associated token or goal metadata.
+ */
+export interface LineEvent {
+  index: number;
+  kind: 'start' | 'end' | 'goal';
+  data: any;
+  length?: number;
+  id?: number;
+}
+
+/**
+ * Parses raw LSP semantic token delta integers into structured Token objects.
+ *
+ * This function processes the 5-element delta array returned by the LSP, tracking cumulative
+ * line/column offsets, mapping type indexes to legend strings, and filtering out prepended code.
+ */
+export function parseSemanticTokens(
+  data: number[],
+  legend: string[],
+  prependLines: number
+): Token[] {
+  const tokens: Token[] = [];
+  let currentLine = 0;
+  let currentCol = 0;
+
+  for (let i = 0; i < data.length; i += 5) {
+    const deltaLine = data[i]!;
+    const deltaStartChar = data[i + 1]!;
+    const length = data[i + 2]!;
+    const tokenTypeIndex = data[i + 3]!;
+    
+    currentLine += deltaLine;
+    if (deltaLine > 0) {
+      currentCol = deltaStartChar;
+    } else {
+      currentCol += deltaStartChar;
+    }
+
+    const type = legend[tokenTypeIndex] || "variable";
+    if (currentLine >= prependLines) {
+      tokens.push({
+        line: currentLine - prependLines,
+        start: currentCol,
+        length,
+        type
+      });
+    }
+  }
+  return tokens;
+}
+
+/**
+ * Tokenizes lines of code to identify potential queryable word boundaries.
+ *
+ * This function uses a regex pattern to extract alphanumeric and special symbols (including primes
+ * and Greek letters) alongside non-whitespace symbols, creating search coords for hover queries.
+ */
+export function extractQueryTokens(lines: string[]): QueryToken[] {
+  const tokenizeRegex = /[a-zA-Z_α-ωΑ-Ω0-9']+|[^\s]/g;
+  const queryTokens: QueryToken[] = [];
+  for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
+    const lineText = lines[lineIndex];
+    if (!lineText) continue;
+
+    let match;
+    tokenizeRegex.lastIndex = 0;
+    while ((match = tokenizeRegex.exec(lineText)) !== null) {
+      queryTokens.push({
+        line: lineIndex,
+        startChar: match.index,
+        length: match[0].length,
+        word: match[0]
+      });
+    }
+  }
+  return queryTokens;
+}
+
+/**
+ * Merges discovered tokens covering the exact same span to avoid redundant tags.
+ *
+ * This iterates through all discovered tokens and combines hover text, definitions, and permalinks
+ * for tokens that share identical line and column boundaries.
+ */
+export function deduplicateDiscoveredTokens(
+  discovered: DiscoveredToken[]
+): DiscoveredToken[] {
+  const uniqueTokens: DiscoveredToken[] = [];
+  for (const d of discovered) {
+    const existing = uniqueTokens.find(u => 
+      u.startLine === d.startLine && u.startChar === d.startChar &&
+      u.endLine === d.endLine && u.endChar === d.endChar
+    );
+    if (existing) {
+      if (!existing.hoverText && d.hoverText) existing.hoverText = d.hoverText;
+      if (!existing.defUri && d.defUri) {
+        existing.defUri = d.defUri;
+        existing.defLine = d.defLine;
+        existing.defChar = d.defChar;
+      }
+      if (!existing.permalink && d.permalink) {
+        existing.permalink = d.permalink;
+      }
+    } else {
+      uniqueTokens.push(d);
+    }
+  }
+  return uniqueTokens;
+}
+
+/**
+ * Identifies character column positions in a line where Lean proof states should be queried.
+ *
+ * It parses the line to find offsets before comment boundaries where semicolons, special markers
+ * like `<;>`, or the end of the line suggest a proof step/goal change.
+ */
+export function getGoalQueryPositions(lineText: string): number[] {
+  let cleanText = lineText;
+  const commentIndex = cleanText.indexOf("--");
+  if (commentIndex !== -1) {
+    cleanText = cleanText.substring(0, commentIndex);
+  }
+  cleanText = cleanText.trimEnd();
+
+  const positions: number[] = [];
+  const regex = /<;>|;/g;
+  let match;
+  while ((match = regex.exec(cleanText)) !== null) {
+    let pos = match.index;
+    while (pos > 0 && /\s/.test(cleanText[pos - 1]!)) {
+      pos--;
+    }
+    if (pos > 0 && !positions.includes(pos)) {
+      positions.push(pos);
+    }
+  }
+
+  if (!cleanText.endsWith("<;>") && !cleanText.endsWith(";")) {
+    positions.push(cleanText.length);
+  }
+  return positions;
+}
+
+/**
+ * Generates and sorts start, end, and goal marker events for a single line of code.
+ *
+ * This merges tokens and goal positions into a unified list of formatting events sorted
+ * sequentially by index, ensuring HTML tag nesting matches the overlapping structure.
+ */
+export function createAndSortLineEvents(
+  lineTokens: Token[],
+  goals: GoalPosition[]
+): LineEvent[] {
+  const events: LineEvent[] = [];
+
+  for (let i = 0; i < lineTokens.length; i++) {
+    const token = lineTokens[i]!;
+    events.push({ index: token.start, kind: 'start', data: token, length: token.length, id: i });
+    events.push({ index: token.start + token.length, kind: 'end', data: token, length: token.length, id: i });
+  }
+
+  for (const goal of goals) {
+    events.push({ index: goal.character, kind: 'goal', data: goal });
+  }
+
+  events.sort((a, b) => {
+    if (a.index !== b.index) return a.index - b.index;
+    
+    if (a.kind === 'goal' && b.kind !== 'goal') return -1;
+    if (b.kind === 'goal' && a.kind !== 'goal') return 1;
+
+    if (a.kind === 'end' && b.kind === 'start') return -1;
+    if (a.kind === 'start' && b.kind === 'end') return 1;
+
+    if (a.kind === 'start' && b.kind === 'start') {
+      if (a.length !== b.length) return b.length! - a.length!;
+      return a.id! - b.id!;
+    }
+    if (a.kind === 'end' && b.kind === 'end') {
+      if (a.length !== b.length) return a.length! - b.length!;
+      return b.id! - a.id!;
+    }
+
+    return 0;
+  });
+
+  return events;
 }
 
 

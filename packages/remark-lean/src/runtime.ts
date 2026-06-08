@@ -5,33 +5,46 @@ export interface SetupOptions {
   tooltipClass?: string;
 }
 
+/**
+ * Represents the controller interface for managing a tooltip and its hover state.
+ *
+ * It contains references to the trigger element, the tooltip DOM element, the hover status,
+ * timeout handle for debounced hiding, and a close function to clean up listeners and DOM nodes.
+ */
+export interface TooltipController {
+  element: HTMLElement;
+  tooltip: HTMLElement;
+  isHovered: boolean;
+  hideTimeout: ReturnType<typeof setTimeout> | null;
+  close: () => void;
+}
+
+/**
+ * Recursively checks if a given tooltip controller or any of its child controllers are active.
+ *
+ * A controller is considered active if it is currently hovered, or if any other controller
+ * whose trigger element is contained within this controller's tooltip is active.
+ */
+export function isControllerActive(c: TooltipController, activeTooltips: TooltipController[]): boolean {
+  if (c.isHovered) return true;
+  return activeTooltips.some(child => {
+    if (child === c) return false;
+    if (c.tooltip.contains(child.element)) {
+      return isControllerActive(child, activeTooltips);
+    }
+    return false;
+  });
+}
+
 export function leanHydrate(options: SetupOptions = {}) {
   const hoveredClass = options.hoveredClass || "lean-hovered";
   const tooltipClass = options.tooltipClass || "lean-tooltip";
 
-  interface TooltipController {
-    element: HTMLElement;
-    tooltip: HTMLElement;
-    isHovered: boolean;
-    hideTimeout: ReturnType<typeof setTimeout> | null;
-    close: () => void;
-  }
   let activeTooltips: TooltipController[] = [];
-
-  function isControllerActive(c: TooltipController): boolean {
-    if (c.isHovered) return true;
-    return activeTooltips.some(child => {
-      if (child === c) return false;
-      if (c.tooltip.contains(child.element)) {
-        return isControllerActive(child);
-      }
-      return false;
-    });
-  }
 
   function updateTooltips() {
     for (const c of activeTooltips) {
-      const active = isControllerActive(c);
+      const active = isControllerActive(c, activeTooltips);
       if (active) {
         if (c.hideTimeout) {
           clearTimeout(c.hideTimeout);
