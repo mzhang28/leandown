@@ -96,28 +96,3 @@ export const githubLink = "https://github.com/mzhang28/remark-lean";
 		Hover over nested signatures inside tooltip overlays recursively, keeping stack-based tooltips open seamlessly.
 	</Card>
 </CardGrid>
-
-## Quick Start
-
-Transform your Markdown files with interactive Lean blocks:
-
-```ts
-import { remark } from "remark";
-import remarkHtml from "remark-html";
-import remarkLean from "remark-lean";
-
-const html = await remark()
-  .use(remarkLean, { leanProjectPath: "/path/to/lean-project" })
-  .use(remarkHtml, { sanitize: false })
-  .process(markdown);
-```
-
-Then load the runtime and stylesheet in your client application:
-
-```ts
-import { leanHydrate } from "remark-lean/runtime";
-import "remark-lean/lean.css";
-
-// Hydrate Lean interactive elements
-leanHydrate();
-```
