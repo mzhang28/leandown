@@ -52,3 +52,4 @@ reports/stryker-incremental.json
 **/.leandown
 
 3rd-party
+.claude/worktrees
