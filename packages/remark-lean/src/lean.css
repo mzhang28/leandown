@@ -1,64 +1,171 @@
-/* Lean 4 Semantic Highlighting Styles (One Dark theme inspired) */
+/* Lean 4 Semantic Highlighting Styles */
+
+:root {
+  /* One Light theme inspired (default) */
+  --lean-bg: #fafafa;
+  --lean-fg: #383a42;
+  --lean-border: #e5e5e6;
+  --lean-shadow: rgba(0, 0, 0, 0.05);
+
+  --lean-keyword: #a626a4;
+  --lean-variable: #e45649;
+  --lean-property: #c18401;
+  --lean-function: #4078f2;
+  --lean-namespace: #c18401;
+  --lean-type: #0184bc;
+  --lean-string: #50a14f;
+  --lean-number: #986801;
+  --lean-comment: #a0a1a7;
+  --lean-operator: #0184bc;
+  --lean-sorry: #e45649;
+
+  --lean-hover-bg: rgba(64, 120, 242, 0.15);
+  --lean-hover-shadow: rgba(64, 120, 242, 0.3);
+  --lean-flash-bg: rgba(64, 120, 242, 0.5);
+
+  --lean-tooltip-bg: #f0f0f1;
+  --lean-tooltip-fg: #383a42;
+  --lean-tooltip-border: #e5e5e6;
+  --lean-tooltip-shadow: rgba(0, 0, 0, 0.15);
+  --lean-tooltip-type: #50a14f;
+  --lean-tooltip-code-bg: #e5e5e6;
+  --lean-tooltip-code-fg: #e45649;
+
+  --lean-goal-marker: #0184bc;
+  --lean-goal-marker-hover: #4078f2;
+}
+
+:root[data-theme="dark"] {
+  /* One Dark theme inspired */
+  --lean-bg: #282c34;
+  --lean-fg: #abb2bf;
+  --lean-border: #3e4451;
+  --lean-shadow: rgba(0, 0, 0, 0.15);
+
+  --lean-keyword: #c678dd;
+  --lean-variable: #e06c75;
+  --lean-property: #e5c07b;
+  --lean-function: #61afef;
+  --lean-namespace: #e5c07b;
+  --lean-type: #56b6c2;
+  --lean-string: #98c379;
+  --lean-number: #d19a66;
+  --lean-comment: #7f848e;
+  --lean-operator: #56b6c2;
+  --lean-sorry: #ff6b6b;
+
+  --lean-hover-bg: rgba(97, 175, 239, 0.25);
+  --lean-hover-shadow: rgba(97, 175, 239, 0.5);
+  --lean-flash-bg: rgba(97, 175, 239, 0.8);
+
+  --lean-tooltip-bg: #181825;
+  --lean-tooltip-fg: #cdd6f4;
+  --lean-tooltip-border: #45475a;
+  --lean-tooltip-shadow: rgba(0, 0, 0, 0.4);
+  --lean-tooltip-type: #a6e3a1;
+  --lean-tooltip-code-bg: #313244;
+  --lean-tooltip-code-fg: #f38ba8;
+
+  --lean-goal-marker: #56b6c2;
+  --lean-goal-marker-hover: #61afef;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    /* One Dark theme inspired */
+    --lean-bg: #282c34;
+    --lean-fg: #abb2bf;
+    --lean-border: #3e4451;
+    --lean-shadow: rgba(0, 0, 0, 0.15);
+
+    --lean-keyword: #c678dd;
+    --lean-variable: #e06c75;
+    --lean-property: #e5c07b;
+    --lean-function: #61afef;
+    --lean-namespace: #e5c07b;
+    --lean-type: #56b6c2;
+    --lean-string: #98c379;
+    --lean-number: #d19a66;
+    --lean-comment: #7f848e;
+    --lean-operator: #56b6c2;
+    --lean-sorry: #ff6b6b;
+
+    --lean-hover-bg: rgba(97, 175, 239, 0.25);
+    --lean-hover-shadow: rgba(97, 175, 239, 0.5);
+    --lean-flash-bg: rgba(97, 175, 239, 0.8);
+
+    --lean-tooltip-bg: #181825;
+    --lean-tooltip-fg: #cdd6f4;
+    --lean-tooltip-border: #45475a;
+    --lean-tooltip-shadow: rgba(0, 0, 0, 0.4);
+    --lean-tooltip-type: #a6e3a1;
+    --lean-tooltip-code-bg: #313244;
+    --lean-tooltip-code-fg: #f38ba8;
+
+    --lean-goal-marker: #56b6c2;
+    --lean-goal-marker-hover: #61afef;
+  }
+}
 
 pre code.language-lean {
   font-family: 'Fira Code', 'JetBrains Mono', monospace;
   font-size: 0.95rem;
   line-height: 1.6;
-  color: #abb2bf;
-  background-color: #282c34;
+  color: var(--lean-fg);
+  background-color: var(--lean-bg);
   padding: 1.25rem;
   border-radius: 12px;
   display: block;
   overflow-x: auto;
-  border: 1px solid #3e4451;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+  border: 1px solid var(--lean-border);
+  box-shadow: 0 10px 30px var(--lean-shadow);
 }
 
 .lean-keyword {
-  color: #c678dd;
+  color: var(--lean-keyword);
   font-weight: bold;
 }
 
 .lean-variable {
-  color: #e06c75;
+  color: var(--lean-variable);
 }
 
 .lean-property {
-  color: #e5c07b;
+  color: var(--lean-property);
 }
 
 .lean-function, .lean-method {
-  color: #61afef;
+  color: var(--lean-function);
 }
 
 .lean-namespace {
-  color: #e5c07b;
+  color: var(--lean-namespace);
 }
 
 .lean-type, .lean-class, .lean-struct, .lean-interface {
-  color: #56b6c2;
+  color: var(--lean-type);
   font-weight: 500;
 }
 
 .lean-string {
-  color: #98c379;
+  color: var(--lean-string);
 }
 
 .lean-number {
-  color: #d19a66;
+  color: var(--lean-number);
 }
 
 .lean-comment {
-  color: #7f848e;
+  color: var(--lean-comment);
   font-style: italic;
 }
 
 .lean-operator {
-  color: #56b6c2;
+  color: var(--lean-operator);
 }
 
 .lean-leanSorryLike {
-  color: #ff6b6b;
+  color: var(--lean-sorry);
   text-decoration: underline dashed;
   font-weight: bold;
 }
@@ -70,16 +177,16 @@ pre code.language-lean {
 }
 
 .lean-hovered {
-  background-color: rgba(97, 175, 239, 0.25);
+  background-color: var(--lean-hover-bg);
   border-radius: 3px;
-  text-shadow: 0 0 8px rgba(97, 175, 239, 0.5);
+  text-shadow: 0 0 8px var(--lean-hover-shadow);
   text-decoration: underline;
 }
 
 @keyframes lean-flash-animation {
-  0% { background-color: rgba(97, 175, 239, 0); }
-  20% { background-color: rgba(97, 175, 239, 0.8); text-shadow: 0 0 12px rgba(97, 175, 239, 0.8); }
-  100% { background-color: rgba(97, 175, 239, 0); }
+  0% { background-color: transparent; }
+  20% { background-color: var(--lean-flash-bg); text-shadow: 0 0 12px var(--lean-flash-bg); }
+  100% { background-color: transparent; }
 }
 
 .lean-flash {
@@ -92,14 +199,14 @@ pre code.language-lean {
   position: absolute;
   width: max-content;
   max-width: 320px;
-  background-color: #181825;
-  color: #cdd6f4;
+  background-color: var(--lean-tooltip-bg);
+  color: var(--lean-tooltip-fg);
   padding: 8px 12px;
   border-radius: 4px;
   font-size: 0.85rem;
   font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  border: 1px solid #45475a;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  border: 1px solid var(--lean-tooltip-border);
+  box-shadow: 0 4px 16px var(--lean-tooltip-shadow);
   visibility: hidden;
   pointer-events: auto;
   z-index: 9999;
@@ -135,7 +242,7 @@ pre code.language-lean {
 .lean-tooltip pre code {
   font-family: 'Fira Code', 'JetBrains Mono', monospace;
   font-size: 0.95rem;
-  color: #a6e3a1; /* Highlight type signatures in green */
+  color: var(--lean-tooltip-type); /* Highlight type signatures */
   background-color: transparent;
   padding: 0;
   border-radius: 0;
@@ -145,8 +252,8 @@ pre code.language-lean {
 .lean-tooltip code {
   font-family: 'Fira Code', 'JetBrains Mono', monospace;
   font-size: 0.95em;
-  color: #f38ba8; /* inline code color */
-  background-color: #313244;
+  color: var(--lean-tooltip-code-fg); /* inline code color */
+  background-color: var(--lean-tooltip-code-bg);
   padding: 1px 3px;
   border-radius: 3px;
 }
@@ -154,7 +261,7 @@ pre code.language-lean {
 .lean-tooltip hr {
   margin: 6px 0;
   border: none;
-  border-top: 1px solid #45475a;
+  border-top: 1px solid var(--lean-tooltip-border);
 }
 
 .lean-tooltip ul {
@@ -179,7 +286,7 @@ pre code.language-lean {
 .lean-goal-marker {
   display: inline-block;
   margin-left: 10px;
-  color: #56b6c2;
+  color: var(--lean-goal-marker);
   font-weight: bold;
   cursor: pointer;
   opacity: 0.5;
@@ -189,7 +296,7 @@ pre code.language-lean {
 
 .lean-goal-marker:hover {
   opacity: 1;
-  color: #61afef;
+  color: var(--lean-goal-marker-hover);
   transform: scale(1.2);
 }
 
