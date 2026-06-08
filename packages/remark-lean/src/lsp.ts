@@ -381,26 +381,29 @@ export class LeanLSPClient {
           positions.push(cleanText.length);
         }
 
-        const goalsList: GoalPosition[] = [];
-        for (const pos of positions) {
-          const goalRes = await this.sendRequest("$/lean/plainGoal", {
-            textDocument: { uri: tempFileUri },
-            position: { line: lineIndex + prependLines, character: pos }
-          });
+        const rawGoalsList = await Promise.all(
+          positions.map(async (pos) => {
+            const goalRes = await this.sendRequest("$/lean/plainGoal", {
+              textDocument: { uri: tempFileUri },
+              position: { line: lineIndex + prependLines, character: pos }
+            });
 
-          if (goalRes && goalRes.result) {
-            const rawGoal = goalRes.result.rendered || "";
-            if (rawGoal) {
-              const compiled = await remark().use(remarkHtml).process(rawGoal);
-              const targetBlankHtml = addTargetBlank(String(compiled).trim());
-              const finalHtml = highlightGoalHtml(targetBlankHtml, this.currentWordMap);
-              goalsList.push({
-                character: pos,
-                compiledHtml: finalHtml
-              });
+            if (goalRes && goalRes.result) {
+              const rawGoal = goalRes.result.rendered || "";
+              if (rawGoal) {
+                const compiled = await remark().use(remarkHtml).process(rawGoal);
+                const targetBlankHtml = addTargetBlank(String(compiled).trim());
+                const finalHtml = highlightGoalHtml(targetBlankHtml, this.currentWordMap);
+                return {
+                  character: pos,
+                  compiledHtml: finalHtml
+                };
+              }
             }
-          }
-        }
+            return null;
+          })
+        );
+        const goalsList: GoalPosition[] = rawGoalsList.filter((goal): goal is GoalPosition => goal !== null);
 
         if (goalsList.length > 0) {
           lineGoals.set(lineIndex, goalsList);
