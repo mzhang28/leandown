@@ -40,10 +40,14 @@ jobs:
           bun run --cwd packages/markdown-it build
           bun run --cwd packages/comark build
 
+      - name: Build blueprint package
+        working-directory: packages/blueprint
+        run: bun run build
+
       - name: Set package versions from tag
         run: |
           TAG="${GITHUB_REF_NAME#v}"
-          for pkg in core remark markdown-it comark; do
+          for pkg in core remark markdown-it comark blueprint; do
             bun x json -I -f packages/$pkg/package.json -e "this.version='$TAG'"
           done
 
@@ -67,6 +71,12 @@ jobs:
 
       - name: Publish comark adapter to npm
         working-directory: packages/comark
+        env:
+          NPM_CONFIG_REGISTRY: https://registry.npmjs.org/
+        run: npm publish --access public --provenance
+
+      - name: Publish blueprint to npm
+        working-directory: packages/blueprint
         env:
           NPM_CONFIG_REGISTRY: https://registry.npmjs.org/
         run: npm publish --access public --provenance
