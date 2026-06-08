@@ -5,9 +5,10 @@
     "dev": "bun index.ts"
   },
   "dependencies": {
+    "@leandown/core": "workspace:*",
+    "@leandown/remark": "workspace:*",
     "remark": "^15.0.1",
-    "remark-html": "^16.0.1",
-    "remark-lean": "workspace:*"
+    "remark-html": "^16.0.1"
   },
   "devDependencies": {
     "@types/node": "latest",

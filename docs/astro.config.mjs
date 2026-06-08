@@ -1,7 +1,7 @@
 // @ts-check
 import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
-import remarkLean from 'remark-lean';
+import remarkLean from '@leandown/remark';
 import { fileURLToPath } from 'node:url';
 
 // https://astro.build/config
@@ -33,7 +33,7 @@ export default defineConfig({
         },
       ],
       customCss: [
-        'remark-lean/lean.css',
+        '@leandown/core/lean.css',
         './src/styles/custom.css'
       ],
       components: {

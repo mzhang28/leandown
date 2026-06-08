@@ -5,7 +5,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Lean Markdown Renderer</title>
-  <link rel="stylesheet" href="/node_modules/remark-lean/src/lean.css">
+  <link rel="stylesheet" href="/node_modules/@leandown/core/lean.css">
   <style>
     body {
       font-family: 'Outfit', 'Inter', system-ui, -apple-system, sans-serif;
@@ -35,7 +35,7 @@
 <body>
   <div id="content"></div>
   <script type="module">
-    import { leanHydrate } from "remark-lean/runtime";
+    import { leanHydrate } from "@leandown/core/runtime";
     leanHydrate();
   </script>
 </body>

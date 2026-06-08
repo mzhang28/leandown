@@ -1,9 +1,10 @@
 {
   "$schema": "https://schema.stryker-mutator.io/bind/stryker-schema.json",
   "mutate": [
-    "packages/remark-lean/src/**/*.ts",
-    "!packages/remark-lean/src/**/*.d.ts",
-    "packages/remark-lean/src/runtime.ts"
+    "packages/core/src/**/*.ts",
+    "!packages/core/src/**/*.d.ts",
+    "packages/remark/src/**/*.ts",
+    "!packages/remark/src/**/*.d.ts"
   ],
   "testRunner": "command",
   "commandRunner": {
@@ -17,7 +18,7 @@
   "plugins": [
     "@stryker-mutator/typescript-checker"
   ],
-  "tsconfigFile": "packages/remark-lean/tsconfig.json",
+  "tsconfigFile": "packages/core/tsconfig.json",
   "reporters": [
     "html",
     "clear-text",

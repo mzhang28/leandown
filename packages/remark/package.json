@@ -1,0 +1,48 @@
+{
+  "name": "@leandown/remark",
+  "version": "0.0.1",
+  "description": "remark plugin for syntax-highlighting Lean 4 code blocks via the Lean LSP",
+  "repository": {
+    "url": "https://github.com/mzhang28/remark-lean"
+  },
+  "main": "dist/index.js",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./src/index.ts",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "publishConfig": {
+    "exports": {
+      ".": {
+        "import": "./dist/index.js",
+        "types": "./dist/index.d.ts"
+      }
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "bun run build:js && bun run build:dts",
+    "build:js": "bun build src/index.ts --outdir dist --format esm --target node",
+    "build:dts": "tsc -p tsconfig.build.json"
+  },
+  "type": "module",
+  "devDependencies": {
+    "@types/mdast": "^4.0.4",
+    "@types/node": "latest",
+    "typescript": "^5",
+    "unified": "^11.0.5"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "@leandown/core": "workspace:*",
+    "remark": "^15.0.1",
+    "remark-html": "^16.0.1"
+  }
+}

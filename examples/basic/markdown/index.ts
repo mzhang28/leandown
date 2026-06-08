@@ -1,7 +1,7 @@
 import { createServer } from "vite";
 import { remark } from "remark";
 import remarkHtml from "remark-html";
-import remarkLean from "remark-lean";
+import remarkLean from "@leandown/remark";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
@@ -22,12 +22,13 @@ async function startServer() {
     },
     resolve: {
       alias: {
-        "remark-lean/runtime": resolve(__dirname, "../../../packages/remark-lean/src/runtime.ts"),
-        "remark-lean": resolve(__dirname, "../../../packages/remark-lean/src/index.ts")
+        "@leandown/core/runtime": resolve(__dirname, "../../../packages/core/src/runtime.ts"),
+        "@leandown/remark": resolve(__dirname, "../../../packages/remark/src/index.ts"),
+        "@leandown/core": resolve(__dirname, "../../../packages/core/src/index.ts")
       }
     },
     optimizeDeps: {
-      exclude: ["remark-lean"]
+      exclude: ["@leandown/remark", "@leandown/core"]
     },
     plugins: [
       {

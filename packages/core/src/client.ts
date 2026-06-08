@@ -2,8 +2,6 @@ import { spawn, execSync, type ChildProcess } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import fs from "node:fs";
 import path from "node:path";
-import { remark } from "remark";
-import remarkHtml from "remark-html";
 import escapeHtml from "escape-html";
 
 import {
@@ -20,9 +18,7 @@ import {
   addTargetBlank,
   highlightGoalHtml,
   hashString,
-} from "./lib";
-
-export * from "./lib";
+} from "./lib.ts";
 
 export class LeanLSPClient {
   private proc: ChildProcess | null = null;
@@ -99,18 +95,24 @@ export class LeanLSPClient {
 
   async highlight(
     content: string,
-    options: { synchronizedHovers?: boolean; prependCode?: string } = {}
+    options: {
+      synchronizedHovers?: boolean;
+      prependCode?: string;
+      compileMarkdown: (markdown: string) => Promise<string> | string;
+    }
   ): Promise<string> {
     if (!this.proc) {
       await this.start();
     }
+
+    const { compileMarkdown } = options;
 
     const wordMap = new Map<
       string,
       { type: string; groupId?: string; hoverText?: string; permalink?: string }
     >();
     const fileId = Math.random().toString(36).substring(7);
-    const tempFilePath = path.join(this.projectPath, `__temp_remark_lean_${fileId}__.lean`);
+    const tempFilePath = path.join(this.projectPath, `__temp_lean_highlight_${fileId}__.lean`);
     const tempFileUri = pathToFileURL(tempFilePath).href;
 
     let prependCode = options.prependCode || "";
@@ -210,7 +212,7 @@ export class LeanLSPClient {
 
         let permalink: string | undefined;
         if (defUri && defLine !== null) {
-          const isLocal = defUri.includes("__temp_remark_lean_");
+          const isLocal = defUri.includes("__temp_lean_highlight_");
           if (!isLocal) {
             permalink = getPermalinkForUri(defUri, defLine);
           }
@@ -246,7 +248,7 @@ export class LeanLSPClient {
 
       for (const u of uniqueTokens) {
         if (u.hoverText) {
-          const compiled = await remark().use(remarkHtml).process(u.hoverText);
+          const compiled = await compileMarkdown(u.hoverText);
           u.hoverText = addTargetBlank(String(compiled).trim());
         }
       }
@@ -254,7 +256,7 @@ export class LeanLSPClient {
       for (const ut of uniqueTokens) {
         let groupId = "";
         if (ut.defLine !== null && ut.defChar !== null && ut.defUri !== null) {
-          if (ut.defUri.includes("__temp_remark_lean_")) {
+          if (ut.defUri.includes("__temp_lean_highlight_")) {
             groupId = `ref-${ut.defLine}-${ut.defChar}`;
           } else {
             const uriHash = hashString(ut.defUri);
@@ -344,9 +346,7 @@ export class LeanLSPClient {
             if (goalRes && goalRes.result) {
               const rawGoal = goalRes.result.rendered || "";
               if (rawGoal) {
-                const compiled = await remark()
-                  .use(remarkHtml)
-                  .process(rawGoal);
+                const compiled = await compileMarkdown(rawGoal);
                 const targetBlankHtml = addTargetBlank(
                   String(compiled).trim()
                 );
@@ -400,9 +400,7 @@ export class LeanLSPClient {
         const combinedMessage = diags.map((d) => d.message).join("\n\n---\n\n");
 
         const markdownMessage = "```lean\n" + combinedMessage + "\n```";
-        const compiled = await remark()
-          .use(remarkHtml)
-          .process(markdownMessage);
+        const compiled = await compileMarkdown(markdownMessage);
         const targetBlankHtml = addTargetBlank(String(compiled).trim());
         const finalHtml = highlightGoalHtml(targetBlankHtml, wordMap);
 
@@ -499,7 +497,6 @@ export class LeanLSPClient {
     const id = this.nextRequestId++;
     return new Promise((res) => {
       this.pendingRequests.set(id, res);
-      // console.log(`sent req ${method}: ${JSON.stringify(params)}`)
       const payload = JSON.stringify({ jsonrpc: "2.0", id, method, params });
       const message = `Content-Length: ${Buffer.byteLength(
         payload,
@@ -651,7 +648,7 @@ function getPermalinkForUri(uri: string, line: number): string | undefined {
         if (cleanedUrl.endsWith(".git")) {
           cleanedUrl = cleanedUrl.slice(0, -4);
         }
-        const githubRegex = /github\.com[:\/]([^\/]+)\/(.+)$/i;
+        const githubRegex = /github\.com[:\\/]([^\\/]+)\/(.+)$/i;
         const match = cleanedUrl.match(githubRegex);
         if (match) {
           const owner = match[1];

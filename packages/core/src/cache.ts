@@ -15,7 +15,7 @@ const dbInitMap = new Map<string, Promise<void>>();
 function getDatabase(customCacheDir?: string): Client {
   const cacheDir = customCacheDir
     ? path.resolve(process.cwd(), customCacheDir)
-    : path.resolve(process.cwd(), "node_modules", ".cache", "remark-lean");
+    : path.resolve(process.cwd(), "node_modules", ".cache", "leandown");
 
   if (!fs.existsSync(cacheDir)) {
     fs.mkdirSync(cacheDir, { recursive: true });
@@ -35,7 +35,7 @@ function getDatabase(customCacheDir?: string): Client {
 async function ensureDatabaseInitialized(customCacheDir?: string): Promise<Client> {
   const cacheDir = customCacheDir
     ? path.resolve(process.cwd(), customCacheDir)
-    : path.resolve(process.cwd(), "node_modules", ".cache", "remark-lean");
+    : path.resolve(process.cwd(), "node_modules", ".cache", "leandown");
   const dbPath = path.join(cacheDir, "cache.db");
 
   const db = getDatabase(customCacheDir);
