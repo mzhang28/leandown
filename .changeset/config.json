@@ -1,0 +1,19 @@
+{
+  "$schema": "https://unpkg.com/@changesets/config@3/schema.json",
+  "changelog": "@changesets/cli/changelog",
+  "commit": false,
+  "fixed": [
+    [
+      "@leandown/core",
+      "@leandown/remark",
+      "@leandown/markdown-it",
+      "@leandown/comark",
+      "@leandown/blueprint"
+    ]
+  ],
+  "linked": [],
+  "access": "public",
+  "baseBranch": "main",
+  "updateInternalDependencies": "patch",
+  "ignore": ["docs", "example-basic", "@leandown/vscode"]
+}

@@ -1,9 +1,14 @@
 {
   "workspaces": ["packages/*", "examples/basic/markdown", "docs"],
   "scripts": {
-    "test:e2e": "playwright test --config tests/playwright.config.ts"
+    "test:e2e": "playwright test --config tests/playwright.config.ts",
+    "changeset": "changeset",
+    "version-packages": "changeset version && bun run fix-workspace-deps",
+    "fix-workspace-deps": "node scripts/fix-workspace-deps.mjs",
+    "release": "node scripts/publish-packages.mjs"
   },
   "devDependencies": {
+    "@changesets/cli": "^2.31.0",
     "@playwright/test": "^1.60.0",
     "@stryker-mutator/core": "^9.6.1",
     "@stryker-mutator/typescript-checker": "^9.6.1",
