@@ -41,66 +41,67 @@ for (const [name, version] of versionMap) {
 }
 console.log();
 
-// --- Publish each package ---
-let published = 0;
-const failures = [];
+// --- Patch all package.json files temporarily ---
+const originalContents = new Map();
 
-for (const dir of PUBLISH_ORDER) {
-  const pkgPath = resolve(root, dir, "package.json");
-  const original = readFileSync(pkgPath, "utf8");
-  const pkg = JSON.parse(original);
+try {
+  console.log("Patching packages for release...");
+  for (const dir of PUBLISH_ORDER) {
+    const pkgPath = resolve(root, dir, "package.json");
+    const original = readFileSync(pkgPath, "utf8");
+    originalContents.set(pkgPath, original);
 
-  // Resolve workspace:* → ^{this package's version} in all dep fields
-  let needsPatch = false;
-  for (const field of ["dependencies", "devDependencies", "peerDependencies"]) {
-    const deps = pkg[field];
-    if (!deps) continue;
+    const pkg = JSON.parse(original);
+    let needsPatch = false;
 
-    for (const [name, version] of Object.entries(deps)) {
-      if (version === "workspace:*" || version === "workspace:^" || version === "workspace:~") {
-        // Look up the actual version of the dependency
-        const resolvedVersion = versionMap.get(name);
-        if (resolvedVersion) {
-          deps[name] = `^${resolvedVersion}`;
-          needsPatch = true;
-          console.log(`  ${pkg.name}: ${name} workspace:* → ^${resolvedVersion}`);
-        } else {
-          console.warn(`  ⚠ ${pkg.name}: cannot resolve ${name} — skipping`);
+    for (const field of ["dependencies", "devDependencies", "peerDependencies"]) {
+      const deps = pkg[field];
+      if (!deps) continue;
+
+      for (const [name, version] of Object.entries(deps)) {
+        if (version === "workspace:*" || version === "workspace:^" || version === "workspace:~") {
+          // Look up the actual version of the dependency
+          const resolvedVersion = versionMap.get(name);
+          if (resolvedVersion) {
+            deps[name] = `^${resolvedVersion}`;
+            needsPatch = true;
+            console.log(`  ${pkg.name}: ${name} ${version} → ^${resolvedVersion}`);
+          } else {
+            console.warn(`  ⚠ ${pkg.name}: cannot resolve ${name} — skipping`);
+          }
         }
       }
     }
+
+    if (needsPatch) {
+      writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + "\n");
+    }
   }
 
-  if (needsPatch) {
-    writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + "\n");
+  // --- Run changeset publish ---
+  console.log("\n🚀 Publishing packages via changeset publish...");
+  execSync("bun run changeset publish", {
+    cwd: root,
+    stdio: "inherit",
+    env: {
+      ...process.env,
+      NPM_CONFIG_PROVENANCE: "true",
+    },
+  });
+  console.log("\n✓ Publishing completed successfully.");
+
+} catch (err) {
+  console.error(`\n✗ Error during publishing: ${err.message}`);
+  process.exitCode = 1;
+} finally {
+  // --- Restore the original package.json files ---
+  console.log("\nReverting package.json files...");
+  for (const [pkgPath, original] of originalContents) {
+    try {
+      writeFileSync(pkgPath, original);
+    } catch (restoreErr) {
+      console.error(`  ✗ failed to restore ${pkgPath}: ${restoreErr.message}`);
+    }
   }
-
-  const pkgSpec = `${pkg.name}@${pkg.version}`;
-  console.log(`\n📦 Publishing ${pkgSpec} (${dir})...`);
-
-  try {
-    execSync("npm publish --provenance --access public", {
-      cwd: resolve(root, dir),
-      stdio: "inherit",
-      env: {
-        ...process.env,
-        NPM_CONFIG_PROVENANCE: "true",
-      },
-    });
-    console.log(`  ✓ published ${pkgSpec}`);
-    published++;
-  } catch (err) {
-    console.error(`  ✗ failed to publish ${pkgSpec}: ${err.message}`);
-    failures.push(pkgSpec);
-  } finally {
-    // Restore the original package.json
-    writeFileSync(pkgPath, original);
-  }
-}
-
-console.log(`\n---`);
-console.log(`Published: ${published}/${PUBLISH_ORDER.length}`);
-if (failures.length > 0) {
-  console.error(`Failures: ${failures.join(", ")}`);
-  process.exit(1);
+  console.log("✓ Reverted all package.json files.");
 }
