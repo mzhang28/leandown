@@ -1,0 +1,55 @@
+{
+  "name": "@leandown/vscode",
+  "displayName": "Lean Markdown (leandown)",
+  "description": "Interactive Lean 4 support inside Markdown files, synchronizing with the Lean 4 Infoview",
+  "version": "0.0.1",
+  "publisher": "leandown",
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Notebooks",
+    "Education"
+  ],
+  "activationEvents": [
+    "onLanguage:markdown"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "leandown.openLeanFile",
+        "title": "Lean Markdown: Open Companion Lean File",
+        "category": "Lean Markdown"
+      },
+      {
+        "command": "leandown.syncLeanFile",
+        "title": "Lean Markdown: Synchronize Companion File",
+        "category": "Lean Markdown"
+      }
+    ],
+    "configuration": {
+      "title": "Lean Markdown",
+      "properties": {
+        "leandown.autoOpenCompanion": {
+          "type": "boolean",
+          "default": false,
+          "description": "Automatically open the companion `.lean` file side-by-side when opening a Markdown file with Lean code blocks."
+        },
+        "leandown.tempDir": {
+          "type": "string",
+          "default": "",
+          "description": "Designated directory to store synthetic Lean files. If empty, uses the '.leandown' folder in the workspace root, falling back to the system temp directory."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "bun build src/extension.ts --outdir dist --format cjs --target node --external vscode"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.80.0",
+    "typescript": "^5"
+  }
+}

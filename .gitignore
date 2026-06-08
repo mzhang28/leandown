@@ -47,3 +47,8 @@ playwright/.local-browsers
 .stryker-tmp
 reports/mutation/mutation.html
 reports/stryker-incremental.json
+
+# leandown companion files
+**/.leandown
+
+3rd-party
