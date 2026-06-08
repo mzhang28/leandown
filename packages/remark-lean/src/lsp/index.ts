@@ -1,5 +1,5 @@
 import { spawn, execSync, type ChildProcess } from "node:child_process";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import fs from "node:fs";
 import path from "node:path";
 import { remark } from "remark";
@@ -33,18 +33,13 @@ export class LeanLSPClient {
   private compileWaiters = new Map<string, () => void>();
   private diagnosticsMap = new Map<string, any[]>();
   private legend: string[] = [];
-  private cwd: string;
 
-  constructor(private rootUri: string) {
-    this.cwd = rootUri.startsWith("file://")
-      ? fileURLToPath(rootUri)
-      : rootUri;
-  }
+  constructor(private projectPath: string) {}
 
   start(): Promise<void> {
     if (this.initPromise) return this.initPromise;
     this.initPromise = (async () => {
-      this.proc = spawn("lake", ["serve"], { cwd: this.cwd });
+      this.proc = spawn("lake", ["serve"], { cwd: this.projectPath });
 
       this.proc.stdout!.on("data", (chunk) => {
         this.buffer = Buffer.concat([this.buffer, chunk]);
@@ -57,7 +52,7 @@ export class LeanLSPClient {
 
       const initRes = await this.sendRequest("initialize", {
         processId: process.pid,
-        rootUri: this.rootUri,
+        rootUri: pathToFileURL(this.projectPath).href,
         capabilities: {
           textDocument: {
             semanticTokens: {
@@ -115,7 +110,8 @@ export class LeanLSPClient {
       { type: string; groupId?: string; hoverText?: string; permalink?: string }
     >();
     const fileId = Math.random().toString(36).substring(7);
-    const tempFileUri = `${this.rootUri}/__temp_remark_lean_${fileId}__.lean`;
+    const tempFilePath = path.join(this.projectPath, `__temp_remark_lean_${fileId}__.lean`);
+    const tempFileUri = pathToFileURL(tempFilePath).href;
 
     let prependCode = options.prependCode || "";
     if (prependCode && !prependCode.endsWith("\n")) {

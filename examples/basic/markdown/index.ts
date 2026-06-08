@@ -9,7 +9,7 @@ import { dirname, resolve } from "node:path";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 async function startServer() {
-  const rootUri = new URL("../lean", import.meta.url).toString();
+  const leanProjectPath = fileURLToPath(new URL("../lean", import.meta.url));
 
   const defaultPort = process.env.PORT ? parseInt(process.env.PORT, 10) : 5173;
 
@@ -41,7 +41,7 @@ async function startServer() {
                 const markdown = await readFile(markdownPath, "utf8");
                 const htmlContent = await remark()
                   .use(remarkLean, {
-                    rootUri,
+                    leanProjectPath,
                     synchronizedHovers: true,
                     cacheDir: process.env.REMARK_LEAN_CACHE_DIR
                   })

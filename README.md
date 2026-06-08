@@ -6,16 +6,24 @@ A [remark](https://github.com/remarkjs/remark) plugin that provides Verso-like f
 
 ## Quick start
 
-You need Lean installed, and a Lean project already initialized.
-Then pass `rootUri` as the path to that project.
+You need Lean installed. Optionally, pass `leanProjectPath` as the path to an
+existing Lean project. If omitted, a minimal temporary project is created
+automatically.
 
 ```ts
 import { remark } from "remark";
 import remarkHtml from "remark-html";
 import remarkLean from "remark-lean";
 
+// With an existing project:
 const html = await remark()
-  .use(remarkLean, { rootUri: "file:///path/to/lean-project" })
+  .use(remarkLean, { leanProjectPath: "/path/to/lean-project" })
+  .use(remarkHtml, { sanitize: false })
+  .process(markdown);
+
+// Or without any options — a temp project is created automatically:
+const html = await remark()
+  .use(remarkLean)
   .use(remarkHtml, { sanitize: false })
   .process(markdown);
 ```

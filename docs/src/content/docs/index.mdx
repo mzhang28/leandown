@@ -107,7 +107,7 @@ import remarkHtml from "remark-html";
 import remarkLean from "remark-lean";
 
 const html = await remark()
-  .use(remarkLean, { rootUri: "file:///path/to/lean-project" })
+  .use(remarkLean, { leanProjectPath: "/path/to/lean-project" })
   .use(remarkHtml, { sanitize: false })
   .process(markdown);
 ```

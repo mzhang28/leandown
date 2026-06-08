@@ -10,7 +10,7 @@ export default defineConfig({
   base: '/remark-lean',
   markdown: {
     remarkPlugins: [
-      [remarkLean, { rootUri: fileURLToPath(new URL('../examples/basic/lean', import.meta.url)) }]
+      [remarkLean, { leanProjectPath: fileURLToPath(new URL('../examples/basic/lean', import.meta.url)) }]
     ]
   },
   integrations: [
