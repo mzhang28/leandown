@@ -37,8 +37,8 @@
   ],
   "scripts": {
     "build": "bun run build:js:node && bun run build:js:browser && bun run build:dts && bun run build:css",
-    "build:js:node": "bun build src/index.ts --outdir dist --format esm --target node",
-    "build:js:browser": "bun build src/runtime.ts --outdir dist --format esm --target browser",
+    "build:js:node": "bun build src/index.ts --outdir dist --format esm --target node --external @floating-ui/dom --external @libsql/client --external escape-html",
+    "build:js:browser": "bun build src/runtime.ts --outdir dist --format esm --target browser --external @floating-ui/dom --external @libsql/client --external escape-html",
     "build:dts": "tsc -p tsconfig.build.json",
     "build:css": "cp lean.css dist/lean.css"
   },

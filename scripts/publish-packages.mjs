@@ -20,6 +20,8 @@ import { fileURLToPath } from "node:url";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = resolve(__dirname, "..");
 
+const dryRun = process.argv.includes("--dry-run") || process.env.DRY_RUN === "true";
+
 const PUBLISH_ORDER = [
   "packages/core",
   "packages/remark",
@@ -73,22 +75,51 @@ try {
       }
     }
 
+    if (pkg.publishConfig) {
+      for (const [key, value] of Object.entries(pkg.publishConfig)) {
+        if (key !== "registry" && key !== "access") {
+          pkg[key] = value;
+          needsPatch = true;
+          console.log(`  ${pkg.name}: promoted publishConfig.${key} to top-level`);
+        }
+      }
+    }
+
     if (needsPatch) {
       writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + "\n");
     }
   }
 
-  // --- Run changeset publish ---
-  console.log("\n🚀 Publishing packages via changeset publish...");
-  execSync("bun run changeset publish", {
-    cwd: root,
-    stdio: "inherit",
-    env: {
-      ...process.env,
-      NPM_CONFIG_PROVENANCE: "true",
-    },
-  });
-  console.log("\n✓ Publishing completed successfully.");
+  // --- Run npm publish for each package ---
+  console.log(`\n🚀 Publishing packages via npm publish...${dryRun ? " (DRY RUN)" : ""}`);
+  for (const dir of PUBLISH_ORDER) {
+    console.log(`\nPublishing ${dir}...`);
+    try {
+      const cmd = `npm publish --provenance --access public${dryRun ? " --dry-run" : ""}`;
+      execSync(cmd, {
+        cwd: resolve(root, dir),
+        stdio: "inherit",
+      });
+    } catch (err) {
+      console.warn(`  ⚠ Failed to publish ${dir}: ${err.message}`);
+    }
+  }
+
+  // --- Run changeset tag ---
+  if (dryRun) {
+    console.log("\n[Dry Run] Skipping git tagging.");
+  } else {
+    console.log("\nTagging releases...");
+    try {
+      execSync("bun run changeset tag", {
+        cwd: root,
+        stdio: "inherit",
+      });
+    } catch (err) {
+      console.error(`Failed to tag releases: ${err.message}`);
+    }
+  }
+  console.log(`\n✓ Publishing and tagging completed successfully.${dryRun ? " (DRY RUN)" : ""}`);
 
 } catch (err) {
   console.error(`\n✗ Error during publishing: ${err.message}`);

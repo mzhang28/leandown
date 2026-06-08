@@ -27,7 +27,7 @@
   ],
   "scripts": {
     "build": "bun run build:js && bun run build:dts",
-    "build:js": "bun build src/index.ts --outdir dist --format esm --target node",
+    "build:js": "bun build src/index.ts --outdir dist --format esm --target node --external @leandown/core --external remark --external remark-html",
     "build:dts": "tsc -p tsconfig.build.json"
   },
   "type": "module",

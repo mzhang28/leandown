@@ -48,7 +48,7 @@
   ],
   "scripts": {
     "build": "bun run build:js && bun run build:dts && bun run build:templates",
-    "build:js": "bun build src/index.ts --outdir dist --format esm --target node --external vite --external unified --external remark-parse --external remark-html --external mdast-util-from-markdown --external @leandown/core --external @leandown/remark --external cmd-ts",
+    "build:js": "bun build src/index.ts src/vite/index.ts src/lean/analyzer.ts --outdir dist --format esm --target node --external vite --external unified --external remark --external remark-html --external @leandown/core --external @leandown/remark --external cmd-ts",
     "build:dts": "tsc -p tsconfig.build.json",
     "build:templates": "rm -rf dist/template && cp -r src/template dist/template"
   },
