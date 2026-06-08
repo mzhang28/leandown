@@ -1,0 +1,65 @@
+{
+  "name": "@leandown/blueprint",
+  "version": "0.0.1",
+  "description": "All-in-one CLI for managing Lean blueprint projects — markdown-based mathematical documents with Lean formalization tracking",
+  "repository": {
+    "url": "https://github.com/mzhang28/remark-lean"
+  },
+  "type": "module",
+  "bin": {
+    "blueprint": "./dist/index.js"
+  },
+  "main": "dist/index.js",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./src/index.ts",
+      "types": "./dist/index.d.ts"
+    },
+    "./vite": {
+      "import": "./src/vite/index.ts",
+      "types": "./dist/vite/index.d.ts"
+    }
+  },
+  "publishConfig": {
+    "exports": {
+      ".": {
+        "import": "./dist/index.js",
+        "types": "./dist/index.d.ts"
+      },
+      "./vite": {
+        "import": "./dist/vite/index.js",
+        "types": "./dist/vite/index.d.ts"
+      }
+    }
+  },
+  "files": [
+    "dist",
+    "src/template"
+  ],
+  "scripts": {
+    "build": "bun run build:js && bun run build:dts && bun run build:templates",
+    "build:js": "bun build src/index.ts --outdir dist --format esm --target node --external vite --external unified --external remark-parse --external remark-html --external mdast-util-from-markdown --external @leandown/core --external @leandown/remark --external cmd-ts",
+    "build:dts": "tsc -p tsconfig.build.json",
+    "build:templates": "rm -rf dist/template && cp -r src/template dist/template"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.3.14",
+    "@types/mdast": "^4.0.4",
+    "@types/node": "latest",
+    "typescript": "^5"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "@leandown/core": "workspace:*",
+    "@leandown/remark": "workspace:*",
+    "cmd-ts": "^0.13.0",
+    "remark": "^15.0.1",
+    "remark-html": "^16.0.1",
+    "unified": "^11.0.5",
+    "vite": "^6.0.0"
+  }
+}

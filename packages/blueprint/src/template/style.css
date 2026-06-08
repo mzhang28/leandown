@@ -1,0 +1,95 @@
+/* Blueprint base styles */
+body {
+  font-family: system-ui, -apple-system, sans-serif;
+  line-height: 1.6;
+  max-width: 48rem;
+  margin: 2rem auto;
+  padding: 0 1rem;
+  color: #1a1a1a;
+  background: #fafafa;
+}
+
+/* Blueprint nodes */
+.blueprint-node {
+  margin: 1.5rem 0;
+  padding: 1rem 1.25rem;
+  border-radius: 8px;
+  border-left: 4px solid #5b7fdb;
+  background: #fff;
+}
+
+.blueprint-node--theorem { border-left-color: #5b7fdb; }
+.blueprint-node--definition { border-left-color: #60a64c; }
+.blueprint-node--lemma { border-left-color: #b8860b; }
+.blueprint-node--proof {
+  border-left-color: #888;
+  border-left-style: dashed;
+}
+.blueprint-node--proposition { border-left-color: #9b59b6; }
+.blueprint-node--corollary { border-left-color: #2e8190; }
+.blueprint-node--example { border-left-color: #e67e22; }
+.blueprint-node--conjecture { border-left-color: #c0392b; }
+.blueprint-node--remark { border-left-color: #7f8c8d; }
+.blueprint-node--note { border-left-color: #95a5a6; }
+
+.blueprint-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.blueprint-kind {
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #555;
+  font-size: 0.75rem;
+}
+
+.blueprint-label {
+  font-family: monospace;
+  color: #2c3e50;
+  background: #eef2f7;
+  padding: 0.1rem 0.4rem;
+  border-radius: 3px;
+  font-size: 0.8rem;
+}
+
+.blueprint-chips {
+  display: flex;
+  gap: 0.3rem;
+  margin-left: auto;
+}
+
+.blueprint-chip {
+  font-size: 0.7rem;
+  padding: 0.1rem 0.4rem;
+  border-radius: 3px;
+  font-weight: 500;
+  cursor: default;
+}
+
+.blueprint-chip--lean {
+  background: #e8f4fd;
+  color: #2471a3;
+}
+
+.blueprint-chip--uses {
+  background: #fef3e0;
+  color: #b8860b;
+}
+
+.blueprint-chip--owner {
+  background: #f0e6f6;
+  color: #7d3c98;
+}
+
+.blueprint-content > :first-child {
+  margin-top: 0;
+}
+
+.blueprint-content > :last-child {
+  margin-bottom: 0;
+}
