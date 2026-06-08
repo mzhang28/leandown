@@ -1,5 +1,6 @@
 {
   "name": "@leandown/vscode",
+  "private": true,
   "displayName": "Lean Markdown (leandown)",
   "description": "Interactive Lean 4 support inside Markdown files, synchronizing with the Lean 4 Infoview",
   "version": "0.0.1",
