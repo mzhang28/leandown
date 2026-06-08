@@ -1,6 +1,7 @@
 import { LeanLSPClient } from "./client.ts";
 import { getCachedHighlight, setCachedHighlight, hashContent, CACHE_VERSION } from "./cache.ts";
 import { wrapLeanCodeBlock } from "./html.ts";
+import { type LeanHighlightBackend, HtmlBackend } from "./backend.ts";
 import os from "node:os";
 import fs from "node:fs";
 import path from "node:path";
@@ -18,7 +19,9 @@ export interface LeanHighlightOptions {
    * and diagnostic messages. Each adapter should provide its own implementation using
    * its ecosystem's markdown compiler.
    */
-  compileMarkdown: (markdown: string) => Promise<string> | string;
+  compileMarkdown?: (markdown: string) => Promise<string> | string;
+  /** Custom backend for rendering the highlighted output. Defaults to HtmlBackend. */
+  backend?: LeanHighlightBackend;
 }
 
 const clientPool = new Map<string, LeanLSPClient>();
@@ -105,11 +108,13 @@ export class LeanHighlightProcessor {
     await client.start();
 
     const syncHovers = this.options.synchronizedHovers ?? true;
+    const backend = this.options.backend ?? new HtmlBackend();
     const cacheKey = hashContent(JSON.stringify({
       cacheVersion: CACHE_VERSION,
       content,
       prependCode: this.cumulativeContent,
-      syncHovers
+      syncHovers,
+      backend: backend.name,
     }));
 
     let highlighted = await getCachedHighlight(cacheKey, this.options.cacheDir);
@@ -119,13 +124,14 @@ export class LeanHighlightProcessor {
         synchronizedHovers: syncHovers,
         prependCode: this.cumulativeContent,
         compileMarkdown: this.options.compileMarkdown,
+        backend,
       });
       await setCachedHighlight(cacheKey, highlighted, this.options.cacheDir);
     }
 
     this.cumulativeContent += content + "\n\n";
 
-    return wrapLeanCodeBlock(highlighted);
+    return backend.wrapBlock(highlighted);
   }
 
   /**

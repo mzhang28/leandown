@@ -20,6 +20,7 @@ import {
   highlightGoalHtml,
   hashString,
 } from "./lib.ts";
+import { type LeanHighlightBackend, HtmlBackend } from "./backend.ts";
 
 export class LeanLSPClient {
   private proc: ChildProcess | null = null;
@@ -99,7 +100,8 @@ export class LeanLSPClient {
     options: {
       synchronizedHovers?: boolean;
       prependCode?: string;
-      compileMarkdown: (markdown: string) => Promise<string> | string;
+      compileMarkdown?: (markdown: string) => Promise<string> | string;
+      backend?: LeanHighlightBackend;
     }
   ): Promise<string> {
     if (!this.proc) {
@@ -107,6 +109,18 @@ export class LeanLSPClient {
     }
 
     const { compileMarkdown } = options;
+    const backend = options.backend ?? new HtmlBackend();
+    const caps = backend.capabilities ?? {
+      hovers: true,
+      definitions: true,
+      goals: true,
+      diagnostics: true,
+    };
+
+    const runHovers = (options.synchronizedHovers ?? true) && !!caps.hovers;
+    const runDefinitions = (options.synchronizedHovers ?? true) && !!caps.definitions;
+    const runGoals = (options.synchronizedHovers ?? true) && !!caps.goals;
+    const runDiagnostics = (options.synchronizedHovers ?? true) && !!caps.diagnostics;
 
     const wordMap = new Map<
       string,
@@ -151,27 +165,31 @@ export class LeanLSPClient {
 
     const lines = content.split("\n");
 
-    if (options.synchronizedHovers) {
+    if (runDefinitions || runHovers) {
       const tempFileName = tempFileUri.split("/").pop();
       const queryTokens = extractQueryTokens(lines);
 
       const results = await Promise.all(
         queryTokens.map(async (qt) => {
           const [defRes, hoverRes] = await Promise.all([
-            this.sendRequest("textDocument/definition", {
-              textDocument: { uri: tempFileUri },
-              position: {
-                line: qt.line + prependLines,
-                character: qt.startChar,
-              },
-            }).catch(() => null),
-            this.sendRequest("textDocument/hover", {
-              textDocument: { uri: tempFileUri },
-              position: {
-                line: qt.line + prependLines,
-                character: qt.startChar,
-              },
-            }).catch(() => null),
+            runDefinitions
+              ? this.sendRequest("textDocument/definition", {
+                  textDocument: { uri: tempFileUri },
+                  position: {
+                    line: qt.line + prependLines,
+                    character: qt.startChar,
+                  },
+                }).catch(() => null)
+              : null,
+            runHovers
+              ? this.sendRequest("textDocument/hover", {
+                  textDocument: { uri: tempFileUri },
+                  position: {
+                    line: qt.line + prependLines,
+                    character: qt.startChar,
+                  },
+                }).catch(() => null)
+              : null,
           ]);
           return { qt, defRes, hoverRes };
         })
@@ -249,7 +267,9 @@ export class LeanLSPClient {
 
       for (const u of uniqueTokens) {
         if (u.hoverText) {
-          const compiled = await compileMarkdown(u.hoverText);
+          const compiled = compileMarkdown
+            ? await compileMarkdown(u.hoverText)
+            : u.hoverText;
           u.hoverText = addTargetBlank(String(compiled).trim());
         }
       }
@@ -329,7 +349,7 @@ export class LeanLSPClient {
       }
     }
     const lineGoals = new Map<number, GoalPosition[]>();
-    if (options.synchronizedHovers) {
+    if (runGoals) {
       for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
         const lineText = lines[lineIndex] || "";
         if (!lineText.trim()) continue;
@@ -347,7 +367,9 @@ export class LeanLSPClient {
             if (goalRes && goalRes.result) {
               const rawGoal = goalRes.result.rendered || "";
               if (rawGoal) {
-                const compiled = await compileMarkdown(rawGoal);
+                const compiled = compileMarkdown
+                  ? await compileMarkdown(rawGoal)
+                  : rawGoal;
                 const targetBlankHtml = addTargetBlank(
                   String(compiled).trim()
                 );
@@ -389,7 +411,7 @@ export class LeanLSPClient {
     }
 
     const lineDiagnostics = new Map<number, DiagnosticPosition[]>();
-    if (options.synchronizedHovers) {
+    if (runDiagnostics) {
       for (const [lineIndex, diags] of diagnosticsByLine.entries()) {
         // Only include diagnostics of severity > 2 (info/hint) for the line-end '…' markers
         const infoDiags = diags.filter((d) => d.severity > 2);
@@ -405,7 +427,9 @@ export class LeanLSPClient {
         const combinedMessage = infoDiags.map((d) => d.message).join("\n\n---\n\n");
 
         const markdownMessage = "```lean\n" + combinedMessage + "\n```";
-        const compiled = await compileMarkdown(markdownMessage);
+        const compiled = compileMarkdown
+          ? await compileMarkdown(markdownMessage)
+          : markdownMessage;
         const targetBlankHtml = addTargetBlank(String(compiled).trim());
         const finalHtml = highlightGoalHtml(targetBlankHtml, wordMap);
 
@@ -422,7 +446,7 @@ export class LeanLSPClient {
 
     // Build squiggly annotation spans from actual LSP diagnostic ranges (errors + warnings only)
     const squigglySpansByLine = new Map<number, DiagnosticSpan[]>();
-    if (options.synchronizedHovers) {
+    if (runDiagnostics) {
       for (const d of localDiagnostics) {
         if (d.severity > 2) continue; // severity 1 = error, 2 = warning
 
@@ -430,7 +454,9 @@ export class LeanLSPClient {
         const dEndLine = d.range.end.line - prependLines;
 
         const markdownMessage = "```lean\n" + d.message + "\n```";
-        const compiled = await compileMarkdown(markdownMessage);
+        const compiled = compileMarkdown
+          ? await compileMarkdown(markdownMessage)
+          : markdownMessage;
         const compiledHtml = highlightGoalHtml(
           addTargetBlank(String(compiled).trim()),
           wordMap
@@ -468,73 +494,52 @@ export class LeanLSPClient {
       const squigglySpans = squigglySpansByLine.get(lineIndex) || [];
       const events = createAndSortLineEvents(lineTokens, goals, diags, squigglySpans);
 
-      let html = "";
+      let formatted = "";
       let lastIndex = 0;
 
       for (const event of events) {
         if (event.index > lastIndex) {
-          html += escapeHtml(lineText.substring(lastIndex, event.index));
+          formatted += backend.escape(lineText.substring(lastIndex, event.index));
           lastIndex = event.index;
         }
 
         if (event.kind === "start") {
-          const token = event.data;
-          let dataAttr = "";
-          if (options.synchronizedHovers) {
-            if (token.groupId) dataAttr += ` data-symbol="${token.groupId}"`;
-            if (token.hoverText)
-              dataAttr += ` data-hover="${escapeHtml(token.hoverText)}"`;
-            if (token.permalink)
-              dataAttr += ` data-permalink="${escapeHtml(token.permalink)}"`;
-            if (token.isDefinition) dataAttr += ` data-is-definition="true"`;
-          }
-
-          const cls = token.type ? `lean-${token.type}` : "lean-hover-span";
-          html += `<span class="${cls}"${dataAttr}>`;
+          formatted += backend.renderTokenStart(event.data);
         } else if (event.kind === "end") {
-          html += `</span>`;
+          formatted += backend.renderTokenEnd(event.data);
         } else if (event.kind === "goal") {
-          const goal = event.data;
-          html += `<span class="lean-goal-marker" data-hover="${escapeHtml(
-            goal.compiledHtml
-          )}">…</span>`;
+          if (backend.renderGoal) {
+            formatted += backend.renderGoal(event.data);
+          }
         } else if (event.kind === "diagnostic") {
-          const diag = event.data;
-          const severityClass =
-            diag.severity === 1
-              ? "lean-diagnostic-error"
-              : diag.severity === 2
-              ? "lean-diagnostic-warning"
-              : "lean-diagnostic-info";
-          html += `<span class="lean-diagnostic-marker ${severityClass}" data-hover="${escapeHtml(
-            diag.compiledHtml
-          )}">…</span>`;
+          if (backend.renderDiagnostic) {
+            formatted += backend.renderDiagnostic(event.data);
+          }
         } else if (event.kind === "squiggly-start") {
-          const span = event.data as DiagnosticSpan;
-          const severityClass =
-            span.severity === 1
-              ? "lean-squiggly-error"
-              : "lean-squiggly-warning";
-          const hoverAttr = span.compiledHtml
-            ? ` data-hover="${escapeHtml(span.compiledHtml)}"`
-            : "";
-          html += `<span class="${severityClass}"${hoverAttr}>`;
+          if (backend.renderSquigglyStart) {
+            formatted += backend.renderSquigglyStart(event.data);
+          }
         } else if (event.kind === "squiggly-end") {
-          html += `</span>`;
+          if (backend.renderSquigglyEnd) {
+            formatted += backend.renderSquigglyEnd(event.data);
+          }
         }
       }
 
       if (lastIndex < lineText.length) {
-        html += escapeHtml(lineText.substring(lastIndex));
+        formatted += backend.escape(lineText.substring(lastIndex));
       }
 
-      return html;
+      return formatted;
     });
 
     this.sendNotification("textDocument/didClose", {
       textDocument: { uri: tempFileUri },
     });
 
+    if (backend.joinLines) {
+      return backend.joinLines(highlightedLines);
+    }
     return highlightedLines.join("\n");
   }
 
