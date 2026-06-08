@@ -26,7 +26,6 @@ export class LeanLSPClient {
   private compileWaiters = new Map<string, () => void>();
   private legend: string[] = [];
   private cwd: string;
-  private currentWordMap = new Map<string, { type: string; groupId?: string; hoverText?: string }>();
 
   constructor(private rootUri: string) {
     this.cwd = rootUri.startsWith("file://")
@@ -82,6 +81,7 @@ export class LeanLSPClient {
       await this.start();
     }
 
+    const wordMap = new Map<string, { type: string; groupId?: string; hoverText?: string; permalink?: string }>();
     const fileId = Math.random().toString(36).substring(7);
     const tempFileUri = `${this.rootUri}/__temp_remark_lean_${fileId}__.lean`;
 
@@ -217,8 +217,6 @@ export class LeanLSPClient {
         }
       }
 
-      const wordMap = new Map<string, { type: string; groupId?: string; hoverText?: string; permalink?: string }>();
-
       for (const ut of uniqueTokens) {
         let groupId = "";
         if (ut.defLine !== null && ut.defChar !== null && ut.defUri !== null) {
@@ -275,8 +273,6 @@ export class LeanLSPClient {
           t.hoverText = highlightGoalHtml(t.hoverText, wordMap);
         }
       }
-
-      this.currentWordMap = wordMap;
     }
     const lineGoals = new Map<number, GoalPosition[]>();
     if (options.synchronizedHovers) {
@@ -299,7 +295,7 @@ export class LeanLSPClient {
               if (rawGoal) {
                 const compiled = await remark().use(remarkHtml).process(rawGoal);
                 const targetBlankHtml = addTargetBlank(String(compiled).trim());
-                const finalHtml = highlightGoalHtml(targetBlankHtml, this.currentWordMap);
+                const finalHtml = highlightGoalHtml(targetBlankHtml, wordMap);
                 return {
                   character: pos,
                   compiledHtml: finalHtml

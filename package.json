@@ -1,7 +1,7 @@
 {
   "workspaces": ["packages/*", "examples/basic/markdown"],
   "scripts": {
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test --config tests/playwright.config.ts"
   },
   "devDependencies": {
     "@playwright/test": "^1.60.0"

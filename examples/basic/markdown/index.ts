@@ -31,7 +31,11 @@ async function startServer() {
                 const markdownPath = resolve(__dirname, "example.md");
                 const markdown = await readFile(markdownPath, "utf8");
                 const htmlContent = await remark()
-                  .use(remarkLean, { rootUri, synchronizedHovers: true })
+                  .use(remarkLean, {
+                    rootUri,
+                    synchronizedHovers: true,
+                    cacheDir: process.env.REMARK_LEAN_CACHE_DIR
+                  })
                   .use(remarkHtml, { sanitize: false })
                   .process(markdown);
 

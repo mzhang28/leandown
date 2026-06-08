@@ -6,6 +6,7 @@ import crypto from "node:crypto";
 export interface RemarkLeanOptions {
   rootUri: string;
   synchronizedHovers?: boolean;
+  cacheDir?: string;
 }
 
 export { LeanLSPClient };
@@ -37,16 +38,18 @@ function hashContent(content: string): string {
   return crypto.createHash("sha256").update(content).digest("hex");
 }
 
-function getCachePath(hash: string): string {
-  const cacheDir = path.resolve(process.cwd(), "node_modules", ".cache", "remark-lean");
+function getCachePath(hash: string, customCacheDir?: string): string {
+  const cacheDir = customCacheDir
+    ? path.resolve(process.cwd(), customCacheDir)
+    : path.resolve(process.cwd(), "node_modules", ".cache", "remark-lean");
   if (!fs.existsSync(cacheDir)) {
     fs.mkdirSync(cacheDir, { recursive: true });
   }
   return path.join(cacheDir, `${hash}.json`);
 }
 
-function getCachedHighlight(hash: string): string | null {
-  const p = getCachePath(hash);
+function getCachedHighlight(hash: string, customCacheDir?: string): string | null {
+  const p = getCachePath(hash, customCacheDir);
   if (fs.existsSync(p)) {
     try {
       return JSON.parse(fs.readFileSync(p, "utf-8"));
@@ -57,8 +60,8 @@ function getCachedHighlight(hash: string): string | null {
   return null;
 }
 
-function setCachedHighlight(hash: string, html: string) {
-  const p = getCachePath(hash);
+function setCachedHighlight(hash: string, html: string, customCacheDir?: string) {
+  const p = getCachePath(hash, customCacheDir);
   try {
     fs.writeFileSync(p, JSON.stringify(html), "utf-8");
   } catch (e) {
@@ -94,14 +97,14 @@ export default function remarkLean(options: RemarkLeanOptions) {
         syncHovers
       }));
 
-      let highlighted = getCachedHighlight(cacheKey);
+      let highlighted = getCachedHighlight(cacheKey, options.cacheDir);
 
       if (!highlighted) {
         highlighted = await client.highlight(node.value, {
           synchronizedHovers: syncHovers,
           prependCode: cumulativeContent
         });
-        setCachedHighlight(cacheKey, highlighted);
+        setCachedHighlight(cacheKey, highlighted, options.cacheDir);
       }
 
       cumulativeContent += node.value + "\n\n";
