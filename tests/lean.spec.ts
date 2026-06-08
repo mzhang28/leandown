@@ -394,4 +394,24 @@ test.describe("Lean Markdown Renderer E2E Tests", () => {
     await page.waitForTimeout(400);
     await expect(page.locator(".lean-tooltip")).toHaveCount(0);
   });
+
+  test("should keep ellipsis markers (span.lean-goal-marker and span.lean-diagnostic-marker) separate and not nested inside other syntax spans", async ({ page }) => {
+    const goalMarkers = page.locator("span.lean-goal-marker");
+    const countGoals = await goalMarkers.count();
+    for (let i = 0; i < countGoals; i++) {
+      const parent = goalMarkers.nth(i).locator("xpath=..");
+      const parentClass = await parent.getAttribute("class") || "";
+      const hasTokenClass = parentClass.split(/\s+/).some(cls => cls.startsWith("lean-") && cls !== "lean-goal-marker" && cls !== "lean-diagnostic-marker");
+      expect(hasTokenClass).toBe(false);
+    }
+
+    const diagMarkers = page.locator("span.lean-diagnostic-marker");
+    const countDiags = await diagMarkers.count();
+    for (let i = 0; i < countDiags; i++) {
+      const parent = diagMarkers.nth(i).locator("xpath=..");
+      const parentClass = await parent.getAttribute("class") || "";
+      const hasTokenClass = parentClass.split(/\s+/).some(cls => cls.startsWith("lean-") && cls !== "lean-goal-marker" && cls !== "lean-diagnostic-marker");
+      expect(hasTokenClass).toBe(false);
+    }
+  });
 });

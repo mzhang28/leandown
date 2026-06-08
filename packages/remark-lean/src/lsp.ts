@@ -870,10 +870,36 @@ export function createAndSortLineEvents(
   goals: GoalPosition[],
   diagnostics: DiagnosticPosition[] = []
 ): LineEvent[] {
+  let activeTokens = [...lineTokens];
+  const markers = [...goals, ...diagnostics];
+
+  for (const marker of markers) {
+    const pos = marker.character;
+    const nextTokens: Token[] = [];
+    for (const token of activeTokens) {
+      if (token.start < pos && pos < token.start + token.length) {
+        const len1 = pos - token.start;
+        const len2 = token.length - len1;
+        nextTokens.push({
+          ...token,
+          length: len1
+        });
+        nextTokens.push({
+          ...token,
+          start: pos,
+          length: len2
+        });
+      } else {
+        nextTokens.push(token);
+      }
+    }
+    activeTokens = nextTokens;
+  }
+
   const events: LineEvent[] = [];
 
-  for (let i = 0; i < lineTokens.length; i++) {
-    const token = lineTokens[i]!;
+  for (let i = 0; i < activeTokens.length; i++) {
+    const token = activeTokens[i]!;
     events.push({ index: token.start, kind: 'start', data: token, length: token.length, id: i });
     events.push({ index: token.start + token.length, kind: 'end', data: token, length: token.length, id: i });
   }
@@ -889,12 +915,16 @@ export function createAndSortLineEvents(
   events.sort((a, b) => {
     if (a.index !== b.index) return a.index - b.index;
     
-    const isMarker = (k: string) => k === 'goal' || k === 'diagnostic';
-    if (isMarker(a.kind) && !isMarker(b.kind)) return -1;
-    if (isMarker(b.kind) && !isMarker(a.kind)) return 1;
+    const getPriority = (kind: string) => {
+      if (kind === 'end') return 0;
+      if (kind === 'goal' || kind === 'diagnostic') return 1;
+      if (kind === 'start') return 2;
+      return 3;
+    };
 
-    if (a.kind === 'end' && b.kind === 'start') return -1;
-    if (a.kind === 'start' && b.kind === 'end') return 1;
+    const pA = getPriority(a.kind);
+    const pB = getPriority(b.kind);
+    if (pA !== pB) return pA - pB;
 
     if (a.kind === 'start' && b.kind === 'start') {
       if (a.length !== b.length) return b.length! - a.length!;
