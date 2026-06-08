@@ -20,6 +20,10 @@
     "./vite": {
       "import": "./src/vite/index.ts",
       "types": "./dist/vite/index.d.ts"
+    },
+    "./lean": {
+      "import": "./src/lean/analyzer.ts",
+      "types": "./dist/lean/analyzer.d.ts"
     }
   },
   "publishConfig": {
@@ -31,6 +35,10 @@
       "./vite": {
         "import": "./dist/vite/index.js",
         "types": "./dist/vite/index.d.ts"
+      },
+      "./lean": {
+        "import": "./dist/lean/analyzer.js",
+        "types": "./dist/lean/analyzer.d.ts"
       }
     }
   },
