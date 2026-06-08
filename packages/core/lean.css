@@ -207,6 +207,7 @@ pre code.language-lean {
 .lean-tooltip {
   position: absolute;
   width: max-content;
+  min-width: 240px;
   max-width: 480px;
   background-color: var(--lean-tooltip-bg);
   color: var(--lean-tooltip-fg);

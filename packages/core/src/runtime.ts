@@ -1,4 +1,5 @@
 import { computePosition, flip, shift, offset, size } from "@floating-ui/dom";
+import { highlightGoalHtml } from "./lib.ts";
 
 export interface SetupOptions {
   hoveredClass?: string;
@@ -82,12 +83,42 @@ export function leanHydrate(options: SetupOptions = {}) {
       visibility: "hidden"
     });
 
-    const hovers: string[] = [];
+    let hoverData: any = null;
+    if (parentTooltipElement && (parentTooltipElement as any)._leanHoverData) {
+      hoverData = (parentTooltipElement as any)._leanHoverData;
+    } else {
+      const pre = el.closest("pre");
+      if (pre) {
+        if ((pre as any)._leanHoverData) {
+          hoverData = (pre as any)._leanHoverData;
+        } else {
+          const script = pre.querySelector(".lean-hover-data") ||
+            (pre.nextElementSibling?.classList.contains("lean-hover-data") ? pre.nextElementSibling : null);
+          if (script) {
+            try {
+              hoverData = JSON.parse(script.textContent || "{}");
+              (pre as any)._leanHoverData = hoverData;
+            } catch (e) {
+              console.error("Failed to parse hover data registry", e);
+            }
+          }
+        }
+      }
+    }
+
+    (tooltip as any)._leanHoverData = hoverData;
+
+    const hoverIds: string[] = [];
+    const directHovers: string[] = [];
     let current: HTMLElement | null = el;
     while (current) {
-      const hoverVal = current.getAttribute("data-hover");
-      if (hoverVal) {
-        hovers.push(hoverVal);
+      const hoverId = current.getAttribute("data-hover-id");
+      if (hoverId) {
+        hoverIds.push(hoverId);
+      }
+      const directHover = current.getAttribute("data-hover");
+      if (directHover) {
+        directHovers.push(directHover);
       }
       if (current.tagName === "PRE" || current.tagName === "BODY") {
         break;
@@ -95,13 +126,26 @@ export function leanHydrate(options: SetupOptions = {}) {
       current = current.parentElement;
     }
 
-    const uniqueHovers: string[] = [];
-    for (const h of hovers) {
-      if (h && !uniqueHovers.includes(h)) {
-        uniqueHovers.push(h);
+    const uniqueHtmls: string[] = [];
+    if (hoverData && hoverData.hovers) {
+      for (const id of hoverIds) {
+        const baseHtml = hoverData.hovers[id];
+        if (baseHtml) {
+          const reconstructedHtml = highlightGoalHtml(baseHtml, hoverData.words || {});
+          if (!uniqueHtmls.includes(reconstructedHtml)) {
+            uniqueHtmls.push(reconstructedHtml);
+          }
+        }
       }
     }
-    tooltip.innerHTML = uniqueHovers.join("<hr>");
+
+    for (const h of directHovers) {
+      if (h && !uniqueHtmls.includes(h)) {
+        uniqueHtmls.push(h);
+      }
+    }
+
+    tooltip.innerHTML = uniqueHtmls.join("<hr>");
     document.body.appendChild(tooltip);
 
     let isMouseInHover = true;
@@ -185,7 +229,7 @@ export function leanHydrate(options: SetupOptions = {}) {
   document.addEventListener("mouseover", (e) => {
     const target = e.target as HTMLElement | null;
     const symbol = target?.closest("[data-symbol]");
-    const hover = target?.closest("[data-hover]") as HTMLElement | null;
+    const hover = target?.closest("[data-hover-id], [data-hover]") as HTMLElement | null;
 
     if (symbol) {
       const symbolValue = symbol.getAttribute("data-symbol");
@@ -220,7 +264,7 @@ export function leanHydrate(options: SetupOptions = {}) {
     const target = e.target as HTMLElement | null;
     const relatedTarget = e.relatedTarget as HTMLElement | null;
     const symbol = target?.closest("[data-symbol]");
-    const hover = target?.closest("[data-hover]") as HTMLElement | null;
+    const hover = target?.closest("[data-hover-id], [data-hover]") as HTMLElement | null;
 
     if (symbol) {
       const symbolValue = symbol.getAttribute("data-symbol");
@@ -235,7 +279,7 @@ export function leanHydrate(options: SetupOptions = {}) {
     }
 
     if (hover && pendingTooltipElement === hover) {
-      const relatedHover = relatedTarget?.closest("[data-hover]");
+      const relatedHover = relatedTarget?.closest("[data-hover-id], [data-hover]");
       if (relatedHover !== hover) {
         if (pendingTooltipTimeout) {
           clearTimeout(pendingTooltipTimeout);

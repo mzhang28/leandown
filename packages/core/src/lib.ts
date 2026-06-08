@@ -6,7 +6,7 @@ export interface Token {
   length: number;
   type: string;
   groupId?: string;
-  hoverText?: string;
+  hoverId?: string;
   permalink?: string;
   isDefinition?: boolean;
 }
@@ -32,21 +32,21 @@ export interface DiscoveredToken {
 
 export interface GoalPosition {
   character: number;
-  compiledHtml: string;
+  hoverId: string;
 }
 
 export interface DiagnosticPosition {
   character: number;
   severity: number;
   message: string;
-  compiledHtml: string;
+  hoverId: string;
 }
 
 export interface DiagnosticSpan {
   startChar: number;
   endChar: number;
   severity: number;
-  compiledHtml: string;
+  hoverId: string;
 }
 
 export interface LineEvent {
@@ -101,9 +101,9 @@ export const addTargetBlank = (html: string): string =>
  */
 export const highlightGoalHtml = (
   html: string,
-  wordMap: Map<
+  words: Record<
     string,
-    { type: string; groupId?: string; hoverText?: string; permalink?: string }
+    { type: string; groupId?: string; hoverId?: string; permalink?: string }
   >
 ): string =>
   html.replace(
@@ -115,19 +115,20 @@ export const highlightGoalHtml = (
         entityOrIdentRegex,
         (m: string, word: string | undefined) => {
           if (!word) return m;
-          const info = wordMap.get(word);
+          const info = words[word];
           if (!info) return word;
 
           const attrs = [
             info.groupId && `data-symbol="${info.groupId}"`,
-            info.hoverText && `data-hover="${escapeHtml(info.hoverText)}"`,
+            info.hoverId && `data-hover-id="${info.hoverId}"`,
             info.permalink && `data-permalink="${escapeHtml(info.permalink)}"`,
           ]
             .filter(Boolean)
             .join(" ");
 
           const dataAttr = attrs ? ` ${attrs}` : "";
-          return `<span class="lean-${info.type}"${dataAttr}>${word}</span>`;
+          const cls = info.type ? `lean-${info.type}` : "lean-hover-span";
+          return `<span class="${cls}"${dataAttr}>${word}</span>`;
         }
       );
       return `<code class="language-lean">${highlightedCode}</code>`;

@@ -66,7 +66,7 @@ export class HtmlBackend implements LeanHighlightBackend {
   renderTokenStart(token: Token): string {
     let dataAttr = "";
     if (token.groupId) dataAttr += ` data-symbol="${token.groupId}"`;
-    if (token.hoverText) dataAttr += ` data-hover="${escapeHtml(token.hoverText)}"`;
+    if (token.hoverId) dataAttr += ` data-hover-id="${token.hoverId}"`;
     if (token.permalink) dataAttr += ` data-permalink="${escapeHtml(token.permalink)}"`;
     if (token.isDefinition) dataAttr += ` data-is-definition="true"`;
 
@@ -79,7 +79,7 @@ export class HtmlBackend implements LeanHighlightBackend {
   }
 
   renderGoal(goal: GoalPosition): string {
-    return `<span class="lean-goal-marker" data-hover="${escapeHtml(goal.compiledHtml)}">…</span>`;
+    return `<span class="lean-goal-marker" data-hover-id="${goal.hoverId}">…</span>`;
   }
 
   renderDiagnostic(diagnostic: DiagnosticPosition): string {
@@ -89,16 +89,16 @@ export class HtmlBackend implements LeanHighlightBackend {
         : diagnostic.severity === 2
         ? "lean-diagnostic-warning"
         : "lean-diagnostic-info";
-    return `<span class="lean-diagnostic-marker ${severityClass}" data-hover="${escapeHtml(
-      diagnostic.compiledHtml
-    )}">…</span>`;
+    return `<span class="lean-diagnostic-marker ${severityClass}" data-hover-id="${
+      diagnostic.hoverId
+    }">…</span>`;
   }
 
   renderSquigglyStart(span: DiagnosticSpan): string {
     const severityClass =
       span.severity === 1 ? "lean-squiggly-error" : "lean-squiggly-warning";
-    const hoverAttr = span.compiledHtml
-      ? ` data-hover="${escapeHtml(span.compiledHtml)}"`
+    const hoverAttr = span.hoverId
+      ? ` data-hover-id="${span.hoverId}"`
       : "";
     return `<span class="${severityClass}"${hoverAttr}>`;
   }

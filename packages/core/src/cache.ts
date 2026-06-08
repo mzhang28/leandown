@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { createClient, type Client } from "@libsql/client";
 
-export const CACHE_VERSION = "v3-permalinks";
+export const CACHE_VERSION = "v4-flat-hovers";
 
 export function hashContent(content: string): string {
   return crypto.createHash("sha256").update(content).digest("hex");

@@ -124,7 +124,7 @@ export class LeanLSPClient {
 
     const wordMap = new Map<
       string,
-      { type: string; groupId?: string; hoverText?: string; permalink?: string }
+      { type: string; groupId?: string; hoverId?: string; permalink?: string }
     >();
     const fileId = Math.random().toString(36).substring(7);
     const tempFilePath = path.join(this.projectPath, `__temp_lean_highlight_${fileId}__.lean`);
@@ -164,6 +164,10 @@ export class LeanLSPClient {
     const tokens = parseSemanticTokens(data, this.legend, prependLines);
 
     const lines = content.split("\n");
+
+    const hoverHtmlToId = new Map<string, string>();
+    const hoverMap: Record<string, string> = {};
+    let hoverIdCounter = 1;
 
     if (runDefinitions || runHovers) {
       const tempFileName = tempFileUri.split("/").pop();
@@ -270,7 +274,15 @@ export class LeanLSPClient {
           const compiled = compileMarkdown
             ? await compileMarkdown(u.hoverText)
             : u.hoverText;
-          u.hoverText = addTargetBlank(String(compiled).trim());
+          const hoverHtml = addTargetBlank(String(compiled).trim());
+
+          let id = hoverHtmlToId.get(hoverHtml);
+          if (!id) {
+            id = `h${hoverIdCounter++}`;
+            hoverHtmlToId.set(hoverHtml, id);
+            hoverMap[id] = hoverHtml;
+          }
+          (u as any).hoverId = id;
         }
       }
 
@@ -284,6 +296,8 @@ export class LeanLSPClient {
             groupId = `ref-ext-${uriHash}-${ut.defLine}-${ut.defChar}`;
           }
         }
+
+        const utHoverId = (ut as any).hoverId;
 
         for (let l = ut.startLine; l <= ut.endLine; l++) {
           if (l < 0 || l >= lines.length) continue;
@@ -310,7 +324,7 @@ export class LeanLSPClient {
             );
             if (existing) {
               if (groupId) existing.groupId = groupId;
-              if (ut.hoverText) existing.hoverText = ut.hoverText;
+              if (utHoverId) existing.hoverId = utHoverId;
               if (ut.permalink) existing.permalink = ut.permalink;
               if (isDef) existing.isDefinition = true;
             } else {
@@ -320,7 +334,7 @@ export class LeanLSPClient {
                 length: eChar - sChar,
                 type: "hover-span",
                 groupId,
-                hoverText: ut.hoverText,
+                hoverId: utHoverId,
                 permalink: ut.permalink,
                 isDefinition: isDef,
               });
@@ -329,25 +343,20 @@ export class LeanLSPClient {
             const word = (lines[l] || "").substring(sChar, eChar);
             if (
               !wordMap.has(word) ||
-              (ut.hoverText && !wordMap.get(word)?.hoverText)
+              (utHoverId && !wordMap.get(word)?.hoverId)
             ) {
               wordMap.set(word, {
                 type: existing ? existing.type : "hover-span",
                 groupId,
-                hoverText: ut.hoverText,
+                hoverId: utHoverId,
                 permalink: ut.permalink,
               });
             }
           }
         }
       }
-
-      for (const t of tokens) {
-        if (t.hoverText) {
-          t.hoverText = highlightGoalHtml(t.hoverText, wordMap);
-        }
-      }
     }
+
     const lineGoals = new Map<number, GoalPosition[]>();
     if (runGoals) {
       for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
@@ -373,10 +382,16 @@ export class LeanLSPClient {
                 const targetBlankHtml = addTargetBlank(
                   String(compiled).trim()
                 );
-                const finalHtml = highlightGoalHtml(targetBlankHtml, wordMap);
+                
+                let id = hoverHtmlToId.get(targetBlankHtml);
+                if (!id) {
+                  id = `h${hoverIdCounter++}`;
+                  hoverHtmlToId.set(targetBlankHtml, id);
+                  hoverMap[id] = targetBlankHtml;
+                }
                 return {
                   character: pos,
-                  compiledHtml: finalHtml,
+                  hoverId: id,
                 };
               }
             }
@@ -431,14 +446,20 @@ export class LeanLSPClient {
           ? await compileMarkdown(markdownMessage)
           : markdownMessage;
         const targetBlankHtml = addTargetBlank(String(compiled).trim());
-        const finalHtml = highlightGoalHtml(targetBlankHtml, wordMap);
+        
+        let id = hoverHtmlToId.get(targetBlankHtml);
+        if (!id) {
+          id = `h${hoverIdCounter++}`;
+          hoverHtmlToId.set(targetBlankHtml, id);
+          hoverMap[id] = targetBlankHtml;
+        }
 
         lineDiagnostics.set(lineIndex, [
           {
             character: pos,
             severity: highestSeverity,
             message: combinedMessage,
-            compiledHtml: finalHtml,
+            hoverId: id,
           },
         ]);
       }
@@ -457,10 +478,14 @@ export class LeanLSPClient {
         const compiled = compileMarkdown
           ? await compileMarkdown(markdownMessage)
           : markdownMessage;
-        const compiledHtml = highlightGoalHtml(
-          addTargetBlank(String(compiled).trim()),
-          wordMap
-        );
+        const targetBlankHtml = addTargetBlank(String(compiled).trim());
+        
+        let id = hoverHtmlToId.get(targetBlankHtml);
+        if (!id) {
+          id = `h${hoverIdCounter++}`;
+          hoverHtmlToId.set(targetBlankHtml, id);
+          hoverMap[id] = targetBlankHtml;
+        }
 
         for (
           let l = Math.max(dStartLine, 0);
@@ -480,7 +505,7 @@ export class LeanLSPClient {
             startChar: sc,
             endChar: ec,
             severity: d.severity,
-            compiledHtml,
+            hoverId: id,
           });
         }
       }
@@ -537,10 +562,33 @@ export class LeanLSPClient {
       textDocument: { uri: tempFileUri },
     });
 
-    if (backend.joinLines) {
-      return backend.joinLines(highlightedLines);
+    const wordsObj: Record<string, any> = {};
+    for (const [word, info] of wordMap.entries()) {
+      wordsObj[word] = {
+        type: info.type,
+        groupId: info.groupId,
+        hoverId: info.hoverId,
+        permalink: info.permalink,
+      };
     }
-    return highlightedLines.join("\n");
+
+    const registry = {
+      hovers: hoverMap,
+      words: wordsObj,
+    };
+
+    const codeHtml = backend.joinLines
+      ? backend.joinLines(highlightedLines)
+      : highlightedLines.join("\n");
+
+    if (backend.name === "html") {
+      const hoverDataScript = `<script type="application/json" class="lean-hover-data">${JSON.stringify(
+        registry
+      )}</script>`;
+      return codeHtml + hoverDataScript;
+    }
+
+    return codeHtml;
   }
 
   async shutdown(): Promise<void> {

@@ -90,7 +90,7 @@ test.describe("Lean Markdown Renderer E2E Tests", () => {
   });
 
   test("should show tooltip on hover and support nested/stacked tooltips with mouse transition", async ({ page }) => {
-    const hoverable = page.locator("[data-hover]").first();
+    const hoverable = page.locator("[data-hover-id]").first();
     await expect(hoverable).toBeVisible();
 
     await hoverable.hover();
@@ -106,7 +106,7 @@ test.describe("Lean Markdown Renderer E2E Tests", () => {
     expect(tooltipText.length).toBeGreaterThan(0);
 
     // Nested tooltips: hover over an identifier inside the tooltip
-    const subHoverable = tooltip.locator("[data-hover]");
+    const subHoverable = tooltip.locator("[data-hover-id]");
     if (await subHoverable.count() > 0) {
       await subHoverable.first().hover();
 
@@ -238,7 +238,7 @@ test.describe("Lean Markdown Renderer E2E Tests", () => {
     await expect(variables.first()).toBeVisible();
 
     // Verify hovers inside the nested block work
-    const hoverable = nestedCodeBlock.locator("[data-hover]").first();
+    const hoverable = nestedCodeBlock.locator("[data-hover-id]").first();
     await expect(hoverable).toBeVisible();
     await hoverable.hover();
 
@@ -255,7 +255,7 @@ test.describe("Lean Markdown Renderer E2E Tests", () => {
     // Verify it doesn't have any Lean-specific classes or attributes
     const leanKeywords = jsCodeBlock.locator(".lean-keyword");
     const leanVariables = jsCodeBlock.locator(".lean-variable");
-    const leanHoverables = jsCodeBlock.locator("[data-hover]");
+    const leanHoverables = jsCodeBlock.locator("[data-hover-id]");
     
     await expect(leanKeywords).toHaveCount(0);
     await expect(leanVariables).toHaveCount(0);
@@ -263,7 +263,7 @@ test.describe("Lean Markdown Renderer E2E Tests", () => {
   });
 
   test("should respect hover debounce and cancel pending tooltip if mouse leaves early", async ({ page }) => {
-    const hoverable = page.locator("[data-hover]").first();
+    const hoverable = page.locator("[data-hover-id]").first();
     await expect(hoverable).toBeVisible();
 
     // 1. Move mouse to hoverable but leave quickly (before 500ms debounce threshold)
@@ -330,7 +330,7 @@ test.describe("Lean Markdown Renderer E2E Tests", () => {
 
   test("should handle nested tooltip state transitions correctly", async ({ page }) => {
     // 1. Open the first tooltip (hover over 'hello')
-    const hoverable = page.locator("[data-hover]").first();
+    const hoverable = page.locator("[data-hover-id]").first();
     await expect(hoverable).toBeVisible();
     await hoverable.hover();
 
@@ -338,7 +338,7 @@ test.describe("Lean Markdown Renderer E2E Tests", () => {
     await expect(parentTooltip).toBeVisible();
 
     // 2. Find a sub-hoverable inside the parent tooltip
-    const subHoverable = parentTooltip.locator("[data-hover]").first();
+    const subHoverable = parentTooltip.locator("[data-hover-id]").first();
     await expect(subHoverable).toBeVisible();
     await subHoverable.hover();
 
@@ -429,7 +429,10 @@ test.describe("Lean Markdown Renderer E2E Tests", () => {
     const diagnosticMarkers = page.locator("span.lean-diagnostic-marker");
     const count = await diagnosticMarkers.count();
     for (let i = 0; i < count; i++) {
-      const text = await diagnosticMarkers.nth(i).getAttribute("data-hover") || "";
+      const hoverId = await diagnosticMarkers.nth(i).getAttribute("data-hover-id") || "";
+      const registryText = await page.locator(".lean-hover-data").first().textContent();
+      const registry = JSON.parse(registryText || "{}");
+      const text = registry.hovers[hoverId] || "";
       // The marker tooltip should not contain "type mismatch" or "unused"
       expect(text).not.toContain("type mismatch");
       expect(text).not.toContain("unused");
