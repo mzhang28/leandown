@@ -1,6 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
 
+import type { InlineConfig } from "vite";
+
 export interface BlueprintConfig {
   /** Project name */
   name: string;
@@ -8,6 +10,8 @@ export interface BlueprintConfig {
   leanProjectPath?: string;
   /** Source directory for markdown files (default: "src") */
   srcDir?: string;
+  /** Vite configuration — same shape as vite.config.ts UserConfig */
+  vite?: InlineConfig;
 }
 
 /**

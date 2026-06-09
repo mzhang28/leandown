@@ -37,26 +37,29 @@ export async function serveCommand(opts: ServeOptions = {}): Promise<void> {
     process.exit(1);
   }
 
-  // Kick off lake build :docs in the background so the dev server starts
-  // immediately. Docs become available at /docs/ once the build finishes.
+  let cfg;
   try {
-    const cfg = readConfig(projectRoot);
+    cfg = readConfig(projectRoot);
     if (cfg.leanProjectPath) {
       docsCommand({ background: true }).catch(() => {});
     }
   } catch { /* no leanProjectPath, skip */ }
 
+  const cfgVite = cfg?.vite ?? {};
+
   console.log(`Starting dev server for blueprint in ${projectRoot}...\n`);
 
   try {
     const server = await createServer({
+      ...cfgVite,
       root: projectRoot,
       configFile: viteConfigPath,
       server: {
-        port: opts.port,
-        host: opts.host,
-        open: opts.open ?? false,
-        strictPort: opts.strictPort,
+        ...cfgVite.server,
+        ...(opts.port !== undefined && { port: opts.port }),
+        ...(opts.host !== undefined && { host: opts.host }),
+        ...(opts.open && { open: opts.open }),
+        ...(opts.strictPort && { strictPort: opts.strictPort }),
       },
     });
 
