@@ -1,5 +1,13 @@
 # @leandown/remark
 
+## 0.0.13
+
+### Patch Changes
+
+- 1df0c15: improve blueprints more
+- Updated dependencies [1df0c15]
+  - @leandown/core@0.0.13
+
 ## 0.0.12
 
 ### Patch Changes
