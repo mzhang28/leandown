@@ -74,6 +74,15 @@ function cleanupClients() {
   for (const client of clientPool.values()) {
     client.shutdown();
   }
+  if (tempProjectPath) {
+    const resolvedPath = path.resolve(tempProjectPath);
+    // Safety checks: ensure it is a subfolder in the temp directory and starts with "leandown-"
+    const isInsideTmp = resolvedPath.startsWith(os.tmpdir());
+    const isLeandownDir = path.basename(resolvedPath).startsWith("leandown-");
+    if (isInsideTmp && isLeandownDir && resolvedPath !== os.tmpdir()) {
+      fs.rmSync(resolvedPath, { recursive: true, force: true });
+    }
+  }
 }
 
 process.on("exit", cleanupClients);
