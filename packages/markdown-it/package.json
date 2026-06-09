@@ -1,6 +1,6 @@
 {
   "name": "@leandown/markdown-it",
-  "version": "0.0.10",
+  "version": "0.0.11",
   "description": "markdown-it plugin for syntax-highlighting Lean 4 code blocks via the Lean LSP",
   "repository": {
     "url": "https://github.com/mzhang28/remark-lean"
@@ -22,7 +22,9 @@
       }
     }
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "bun run build:js && bun run build:dts",
     "build:js": "bun build src/index.ts --outdir dist --format esm --target node --external @leandown/core --external markdown-it",
