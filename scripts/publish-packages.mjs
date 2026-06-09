@@ -25,8 +25,8 @@ const dryRun = process.argv.includes("--dry-run") || process.env.DRY_RUN === "tr
 const PUBLISH_ORDER = [
   "packages/core",
   "packages/remark",
-  "packages/markdown-it",
-  "packages/comark",
+  // "packages/markdown-it",
+  // "packages/comark",
   "packages/blueprint",
 ];
 
@@ -95,7 +95,7 @@ try {
   for (const dir of PUBLISH_ORDER) {
     console.log(`\nPublishing ${dir}...`);
     try {
-      const cmd = `npm publish --provenance --access public${dryRun ? " --dry-run" : ""}`;
+      const cmd = `npm publish --access public${dryRun ? " --dry-run" : ""}`;
       execSync(cmd, {
         cwd: resolve(root, dir),
         stdio: "inherit",
