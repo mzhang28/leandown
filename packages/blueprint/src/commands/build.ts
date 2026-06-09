@@ -31,22 +31,25 @@ export async function buildCommand(): Promise<void> {
     process.exit(1);
   }
 
-  // Build Lean docs first so the plugin can copy them into dist/docs/
+  let cfgVite = {};
   try {
     const cfg = readConfig(projectRoot);
+    cfgVite = cfg.vite ?? {};
     if (cfg.leanProjectPath) {
       await docsCommand();
     }
-  } catch { /* no leanProjectPath, skip */ }
+  } catch { /* no blueprint.json vite config or leanProjectPath, skip */ }
 
   console.log(`Building blueprint in ${projectRoot}...\n`);
 
   try {
     await viteBuild({
+      ...cfgVite,
       root: projectRoot,
       configFile: viteConfigPath,
       logLevel: "info",
       build: {
+        ...(cfgVite as any).build,
         outDir: "dist",
       },
     });
