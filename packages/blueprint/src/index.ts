@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { command, subcommands, run, option, string, optional } from "cmd-ts";
+import { command, subcommands, run, option, flag, string, optional } from "cmd-ts";
 import { initCommand } from "./commands/init.ts";
 import { buildCommand } from "./commands/build.ts";
 import { serveCommand } from "./commands/serve.ts";
@@ -33,10 +33,20 @@ const build = command({
 
 const serve = command({
   name: "serve",
-  args: {},
+  args: {
+    port: option({ type: optional(string), long: "port", short: "p", description: "Port to listen on" }),
+    host: option({ type: optional(string), long: "host", description: "Hostname to listen on" }),
+    open: flag({ long: "open", description: "Open browser on start" }),
+    strictPort: flag({ long: "strictPort", description: "Exit if port is already in use" }),
+  },
   description: "Start the Vite dev server with HMR and live reload",
-  handler: async () => {
-    await serveCommand();
+  handler: async (args) => {
+    await serveCommand({
+      port: args.port ? parseInt(args.port, 10) : undefined,
+      host: args.host,
+      open: args.open || undefined,
+      strictPort: args.strictPort || undefined,
+    });
   },
 });
 

@@ -11,7 +11,14 @@ import fs from "node:fs";
  * The blueprint Vite plugin handles .md → HTML transformation
  * with live reload on file changes.
  */
-export async function serveCommand(): Promise<void> {
+export interface ServeOptions {
+  port?: number;
+  host?: string;
+  open?: boolean;
+  strictPort?: boolean;
+}
+
+export async function serveCommand(opts: ServeOptions = {}): Promise<void> {
   const cwd = process.cwd();
   const projectRoot = findProjectRoot(cwd);
 
@@ -46,7 +53,10 @@ export async function serveCommand(): Promise<void> {
       root: projectRoot,
       configFile: viteConfigPath,
       server: {
-        open: false,
+        port: opts.port,
+        host: opts.host,
+        open: opts.open ?? false,
+        strictPort: opts.strictPort,
       },
     });
 
