@@ -8,6 +8,8 @@ const TEMPLATE_DIR = path.resolve(__dirname, "./template");
 export interface InitOptions {
   /** Target directory for the new blueprint project */
   dir?: string;
+  /** Overwrite files even if the target directory is non-empty. */
+  force?: boolean;
 }
 
 /**
@@ -48,10 +50,14 @@ export async function initCommand(options: InitOptions): Promise<void> {
   const projectName = path.basename(targetDir);
 
   if (fs.existsSync(targetDir) && fs.readdirSync(targetDir).length > 0) {
-    console.error(
-      `Error: Directory '${targetDir}' already exists and is not empty.`
-    );
-    process.exit(1);
+    if (!options.force) {
+      console.error(
+        `Error: Directory '${targetDir}' already exists and is not empty.\n` +
+          `Use --force to overwrite.`,
+      );
+      process.exit(1);
+    }
+    console.log(`Directory '${targetDir}' already exists — will overwrite files.\n`);
   }
 
   fs.mkdirSync(targetDir, { recursive: true });
@@ -72,13 +78,8 @@ export async function initCommand(options: InitOptions): Promise<void> {
 
   // Write source files
   copyTemplate(
-    "main.ts",
-    path.join(targetDir, "src", "main.ts"),
-    replacements
-  );
-  copyTemplate(
-    "style.css",
-    path.join(targetDir, "src", "style.css"),
+    "main.tsx",
+    path.join(targetDir, "src", "main.tsx"),
     replacements
   );
   copyTemplate(
@@ -101,10 +102,11 @@ export async function initCommand(options: InitOptions): Promise<void> {
 
   // Write Vite config
   const viteConfig = `import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
 import { blueprint } from "@leandown/blueprint/vite";
 
 export default defineConfig({
-  plugins: [blueprint()],
+  plugins: [react(), blueprint()],
 });
 `;
   fs.writeFileSync(path.join(targetDir, "vite.config.ts"), viteConfig);
@@ -121,7 +123,15 @@ export default defineConfig({
     dependencies: {
       "@leandown/blueprint": "^0.0.1",
       "@leandown/core": "^0.0.1",
+      "@tanstack/react-router": "^1.0.0",
+      react: "^19.0.0",
+      "react-dom": "^19.0.0",
       vite: "^6.0.0",
+    },
+    devDependencies: {
+      "@types/react": "^19.0.0",
+      "@types/react-dom": "^19.0.0",
+      "@vitejs/plugin-react": "^4.0.0",
     },
   };
   fs.writeFileSync(
@@ -141,8 +151,7 @@ export default defineConfig({
   console.log(`  package.json`);
   console.log(`  .gitignore`);
   console.log(`  index.html`);
-  console.log(`  src/main.ts`);
-  console.log(`  src/style.css`);
+  console.log(`  src/main.tsx`);
   console.log(`  src/index.md`);
   console.log(`  src/SUMMARY.md`);
   console.log(`  lean/`);

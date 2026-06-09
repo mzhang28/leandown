@@ -22,9 +22,14 @@ const init = command({
       short: "d",
       description: "Target directory for the new project",
     }),
+    force: flag({
+      long: "force",
+      short: "f",
+      description: "Overwrite files even if target directory is non-empty",
+    }),
   },
   handler: async (args) => {
-    await initCommand({ dir: args.dir });
+    await initCommand({ dir: args.dir, force: args.force });
   },
 });
 

@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="logo.svg" alt="leandown logo" width="208" height="128" />
+</p>
+
 # remark-lean
 
 [![npm version](https://img.shields.io/npm/v/@leandown/remark)](https://www.npmjs.com/package/@leandown/remark)

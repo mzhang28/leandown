@@ -1,5 +1,5 @@
 {
-  "workspaces": ["packages/*", "examples/basic/markdown", "docs"],
+  "workspaces": ["packages/*", "examples/basic/markdown", "docs", "../syntax-universe-lean"],
   "scripts": {
     "test:e2e": "playwright test --config tests/playwright.config.ts",
     "changeset": "changeset",

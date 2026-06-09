@@ -10,6 +10,14 @@ export interface GraphNode {
   kind: string;
   lean?: string;
   route: string;
+  /** Statement is formalized (has a Lean declaration). */
+  stated?: boolean;
+  /** Proof is formalized (no `sorry`). */
+  proved?: boolean;
+  /** Already in mathlib. */
+  mathlib?: boolean;
+  /** Fully formalized — proved and all ancestors are proved. */
+  fullyProved?: boolean;
 }
 
 export interface GraphEdge {
@@ -17,34 +25,88 @@ export interface GraphEdge {
   target: string;
 }
 
+// ── Color palettes ────────────────────────────────────────────────────────
+
+/** Statement status → border colour (lean-blueprint inspired). */
+const STATEMENT_COLORS: Record<string, { color: string; label: string; desc: string }> = {
+  mathlib:    { color: "#1a6b1a", label: "In mathlib",    desc: "already in mathlib; no formalization needed" },
+  stated:     { color: "#28a745", label: "Stated",        desc: "statement is formalized" },
+  can_state:  { color: "#5b7fdb", label: "Ready to state", desc: "all prerequisites are formalized" },
+  not_ready:  { color: "#e67e22", label: "Not ready",     desc: "prerequisites still need work" },
+};
+
+/** Proof status → fill colour (lean-blueprint inspired). */
+const PROOF_COLORS: Record<string, { color: string; label: string; desc: string }> = {
+  fully_proved: { color: "#1CAC78", label: "Fully proved",  desc: "proof and all ancestors are formalized" },
+  proved:       { color: "#9CEC8B", label: "Proved",        desc: "proof is formalized" },
+  can_prove:    { color: "#A3D6FF", label: "Ready to prove", desc: "all proof prerequisites are formalized" },
+};
+
+/** Kind → fallback colour (used when no state data is available). */
 const KIND_COLORS: Record<string, { bg: string; border: string; text: string }> = {
-  theorem:     { bg: "#dde8fb", border: "#5b7fdb", text: "#1a3a7a" },
-  definition:  { bg: "#ddf0d6", border: "#60a64c", text: "#1a4a0a" },
-  lemma:       { bg: "#fef3d0", border: "#b8860b", text: "#5a3e00" },
-  proof:       { bg: "#eeeeee", border: "#888888", text: "#333333" },
-  proposition: { bg: "#ead5f7", border: "#9b59b6", text: "#4a1a7a" },
-  corollary:   { bg: "#d5eef0", border: "#2e8190", text: "#0a3a45" },
-  example:     { bg: "#fde8cc", border: "#e67e22", text: "#7a3500" },
-  conjecture:  { bg: "#f5d0d0", border: "#c0392b", text: "#6a0a0a" },
-  remark:      { bg: "#e8e8e8", border: "#7f8c8d", text: "#333333" },
-  note:        { bg: "#eeeeee", border: "#95a5a6", text: "#444444" },
+  theorem:     { bg: "#f4f6fb", border: "#5b7fdb", text: "#1a3a7a" },
+  definition:  { bg: "#f2f7ef", border: "#60a64c", text: "#1a4a0a" },
+  lemma:       { bg: "#fef9ef", border: "#b8860b", text: "#5a3e00" },
+  proof:       { bg: "#f8f8f8", border: "#999",     text: "#444" },
+  proposition: { bg: "#f7f0f9", border: "#9b59b6", text: "#4a1a7a" },
+  corollary:   { bg: "#f1f7f8", border: "#2e8190", text: "#0a3a45" },
+  example:     { bg: "#fef6ef", border: "#e67e22", text: "#7a3500" },
+  conjecture:  { bg: "#faf0f0", border: "#c0392b", text: "#6a0a0a" },
+  remark:      { bg: "#f6f6f6", border: "#7f8c8d", text: "#444" },
+  note:        { bg: "#f8f8f8", border: "#95a5a6", text: "#555" },
 };
 
 const KIND_LABELS: Record<string, string> = {
-  theorem:     "Theorem",
-  definition:  "Definition",
-  lemma:       "Lemma",
-  proof:       "Proof",
-  proposition: "Proposition",
-  corollary:   "Corollary",
-  example:     "Example",
-  conjecture:  "Conjecture",
-  remark:      "Remark",
-  note:        "Note",
+  theorem: "Theorem", definition: "Definition", lemma: "Lemma",
+  proof: "Proof", proposition: "Proposition", corollary: "Corollary",
+  example: "Example", conjecture: "Conjecture", remark: "Remark", note: "Note",
 };
 
-/** Build and append a colour legend for the dependency graph. */
-function renderLegend(container: HTMLElement, kinds: string[]): void {
+// ── Node colouring ─────────────────────────────────────────────────────────
+
+function resolveStatementColor(node: GraphNode): string | undefined {
+  if (node.mathlib) return STATEMENT_COLORS.mathlib!.color;
+  if (node.stated)  return STATEMENT_COLORS.stated!.color;
+  if (node.fullyProved || node.proved) return STATEMENT_COLORS.can_state!.color;
+  return undefined; // no state → fall back to kind colour
+}
+
+function resolveProofColor(node: GraphNode): string | undefined {
+  if (node.fullyProved) return PROOF_COLORS.fully_proved!.color;
+  if (node.proved)      return PROOF_COLORS.proved!.color;
+  // `can_prove` when stated but not yet proved (optimistic: all deps ready)
+  if (node.stated && !node.proved) return PROOF_COLORS.can_prove!.color;
+  return undefined;
+}
+
+/** True when at least one node carries state data. */
+function hasStateData(nodes: GraphNode[]): boolean {
+  return nodes.some((n) => n.mathlib || n.stated || n.proved || n.fullyProved);
+}
+
+// ── Legend ──────────────────────────────────────────────────────────────────
+
+function swatch(bg: string, border: string): HTMLElement {
+  const s = document.createElement("span");
+  s.className = "graph-legend-swatch";
+  s.style.backgroundColor = bg;
+  s.style.borderColor = border;
+  return s;
+}
+
+function legendItem(bg: string, border: string, label: string, desc: string): HTMLElement {
+  const item = document.createElement("div");
+  item.className = "graph-legend-item";
+  item.title = desc;
+  item.appendChild(swatch(bg, border));
+  const lbl = document.createElement("span");
+  lbl.className = "graph-legend-label";
+  lbl.textContent = label;
+  item.appendChild(lbl);
+  return item;
+}
+
+function renderLegend(container: HTMLElement, nodes: GraphNode[]): void {
   const legend = document.createElement("div");
   legend.className = "graph-legend";
 
@@ -53,44 +115,80 @@ function renderLegend(container: HTMLElement, kinds: string[]): void {
   title.textContent = "Legend";
   legend.appendChild(title);
 
-  for (const kind of kinds) {
-    const colors = KIND_COLORS[kind];
-    if (!colors) continue;
+  const useState = hasStateData(nodes);
 
-    const item = document.createElement("div");
-    item.className = "graph-legend-item";
+  if (useState) {
+    // ── Statement status (border) ──────────────────────────────────
+    const secBorder = document.createElement("div");
+    secBorder.className = "graph-legend-section";
+    const hdrBorder = document.createElement("div");
+    hdrBorder.className = "graph-legend-section-title";
+    hdrBorder.textContent = "Statement status";
+    secBorder.appendChild(hdrBorder);
 
-    const swatch = document.createElement("span");
-    swatch.className = "graph-legend-swatch";
-    swatch.style.backgroundColor = colors.bg;
-    swatch.style.borderColor = colors.border;
+    for (const st of ["mathlib", "stated", "can_state", "not_ready"] as const) {
+      const c = STATEMENT_COLORS[st]!;
+      secBorder.appendChild(legendItem("#fff", c.color, c.label, c.desc));
+    }
+    legend.appendChild(secBorder);
 
-    const label = document.createElement("span");
-    label.className = "graph-legend-label";
-    label.textContent = KIND_LABELS[kind] ?? kind;
+    // ── Proof status (fill) ────────────────────────────────────────
+    const secFill = document.createElement("div");
+    secFill.className = "graph-legend-section";
+    const hdrFill = document.createElement("div");
+    hdrFill.className = "graph-legend-section-title";
+    hdrFill.textContent = "Proof status";
+    secFill.appendChild(hdrFill);
 
-    item.appendChild(swatch);
-    item.appendChild(label);
-    legend.appendChild(item);
+    for (const st of ["fully_proved", "proved", "can_prove"] as const) {
+      const c = PROOF_COLORS[st]!;
+      secFill.appendChild(legendItem(c.color, c.color, c.label, c.desc));
+    }
+    legend.appendChild(secFill);
+  }
+
+  // ── Kind colours (always shown as reference) ──────────────────────
+  const kinds = [...new Set(nodes.map((n) => n.kind))].sort();
+  if (kinds.length > 0) {
+    const secKind = document.createElement("div");
+    secKind.className = "graph-legend-section";
+    if (useState) {
+      const hdrKind = document.createElement("div");
+      hdrKind.className = "graph-legend-section-title";
+      hdrKind.textContent = "Node kind";
+      secKind.appendChild(hdrKind);
+    }
+    for (const kind of kinds) {
+      const c = KIND_COLORS[kind];
+      if (!c) continue;
+      secKind.appendChild(legendItem(c.bg, c.border, KIND_LABELS[kind] ?? kind, ""));
+    }
+    legend.appendChild(secKind);
   }
 
   container.appendChild(legend);
 }
 
+// ── Graph rendering ────────────────────────────────────────────────────────
+
 export function renderGraph(
   container: HTMLElement,
   nodes: GraphNode[],
   edges: GraphEdge[],
-  onNavigate?: (route: string) => void
+  onNavigate?: (route: string) => void,
 ): cytoscape.Core {
-  const kindsInGraph = [...new Set(nodes.map((n) => n.kind))];
   const validIds = new Set(nodes.map((n) => n.id));
 
   const cy = cytoscape({
     container,
     elements: [
       ...nodes.map((n) => ({
-        data: { id: n.id, label: n.label, kind: n.kind, lean: n.lean ?? "", route: n.route },
+        data: {
+          id: n.id, label: n.label, kind: n.kind,
+          lean: n.lean ?? "", route: n.route,
+          stated: n.stated ?? false, proved: n.proved ?? false,
+          mathlib: n.mathlib ?? false, fullyProved: n.fullyProved ?? false,
+        },
       })),
       ...edges
         .filter((e) => validIds.has(e.source) && validIds.has(e.target))
@@ -107,10 +205,27 @@ export function renderGraph(
           "font-family": "system-ui, sans-serif",
           "padding": "8px",
           "shape": "round-rectangle",
-          "background-color": (ele: cytoscape.NodeSingular) => KIND_COLORS[ele.data("kind")]?.bg ?? "#eeeeee",
-          "border-color": (ele: cytoscape.NodeSingular) => KIND_COLORS[ele.data("kind")]?.border ?? "#aaa",
-          "border-width": 2,
-          "color": (ele: cytoscape.NodeSingular) => KIND_COLORS[ele.data("kind")]?.text ?? "#333",
+          "background-color": (ele: cytoscape.NodeSingular) => {
+            const n = ele.data();
+            if (n.mathlib || n.stated || n.proved || n.fullyProved) {
+              return resolveProofColor(n as any) ?? "#fff";
+            }
+            return KIND_COLORS[n.kind]?.bg ?? "#f6f6f6";
+          },
+          "border-color": (ele: cytoscape.NodeSingular) => {
+            const n = ele.data();
+            if (n.mathlib || n.stated || n.proved || n.fullyProved) {
+              return resolveStatementColor(n as any) ?? "#aaa";
+            }
+            return KIND_COLORS[n.kind]?.border ?? "#aaa";
+          },
+          "border-width": (ele: cytoscape.NodeSingular) => {
+            const n = ele.data();
+            return (n.mathlib || n.stated) ? 3 : 2;
+          },
+          "color": (ele: cytoscape.NodeSingular) => {
+            return KIND_COLORS[ele.data("kind")]?.text ?? "#333";
+          },
           "width": "label",
           "height": "label",
         },
@@ -127,11 +242,11 @@ export function renderGraph(
         selector: "edge",
         style: {
           width: 1.5,
-          "line-color": "#d0d0d0",
-          "target-arrow-color": "#d0d0d0",
+          "line-color": "#ccc",
+          "target-arrow-color": "#ccc",
           "target-arrow-shape": "triangle",
           "curve-style": "bezier",
-          opacity: 0.8,
+          opacity: 0.7,
         },
       },
       {
@@ -156,7 +271,6 @@ export function renderGraph(
     wheelSensitivity: 0.25,
   });
 
-  // highlight connected edges on hover
   cy.on("mouseover", "node", (e) => {
     container.style.cursor = "pointer";
     const node = e.target;
@@ -176,7 +290,7 @@ export function renderGraph(
     });
   }
 
-  renderLegend(container, kindsInGraph);
+  renderLegend(container, nodes);
 
   return cy;
 }
