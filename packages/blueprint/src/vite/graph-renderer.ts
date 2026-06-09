@@ -1,8 +1,8 @@
 import cytoscape from "cytoscape";
-// @ts-ignore — no bundled types for cytoscape-dagre
-import dagre from "cytoscape-dagre";
+// @ts-ignore
+import cola from "cytoscape-cola";
 
-cytoscape.use(dagre);
+cytoscape.use(cola);
 
 export interface GraphNode {
   id: string;
@@ -110,44 +110,61 @@ function renderLegend(container: HTMLElement, nodes: GraphNode[]): void {
   const legend = document.createElement("div");
   legend.className = "graph-legend";
 
-  const title = document.createElement("div");
+  // Clickable title bar to toggle
+  const titleBar = document.createElement("div");
+  titleBar.className = "graph-legend-titlebar";
+
+  const toggle = document.createElement("span");
+  toggle.className = "graph-legend-toggle";
+  toggle.textContent = "▶"; // collapsed arrow
+
+  const title = document.createElement("span");
   title.className = "graph-legend-title";
   title.textContent = "Legend";
-  legend.appendChild(title);
+
+  titleBar.appendChild(toggle);
+  titleBar.appendChild(title);
+  legend.appendChild(titleBar);
+
+  // Body (collapsible)
+  const body = document.createElement("div");
+  body.className = "graph-legend-body";
+  body.style.display = "none"; // start collapsed
+
+  titleBar.addEventListener("click", () => {
+    const isOpen = body.style.display !== "none";
+    body.style.display = isOpen ? "none" : "block";
+    toggle.textContent = isOpen ? "▶" : "▼";
+  });
 
   const useState = hasStateData(nodes);
 
   if (useState) {
-    // ── Statement status (border) ──────────────────────────────────
     const secBorder = document.createElement("div");
     secBorder.className = "graph-legend-section";
     const hdrBorder = document.createElement("div");
     hdrBorder.className = "graph-legend-section-title";
     hdrBorder.textContent = "Statement status";
     secBorder.appendChild(hdrBorder);
-
     for (const st of ["mathlib", "stated", "can_state", "not_ready"] as const) {
       const c = STATEMENT_COLORS[st]!;
       secBorder.appendChild(legendItem("#fff", c.color, c.label, c.desc));
     }
-    legend.appendChild(secBorder);
+    body.appendChild(secBorder);
 
-    // ── Proof status (fill) ────────────────────────────────────────
     const secFill = document.createElement("div");
     secFill.className = "graph-legend-section";
     const hdrFill = document.createElement("div");
     hdrFill.className = "graph-legend-section-title";
     hdrFill.textContent = "Proof status";
     secFill.appendChild(hdrFill);
-
     for (const st of ["fully_proved", "proved", "can_prove"] as const) {
       const c = PROOF_COLORS[st]!;
       secFill.appendChild(legendItem(c.color, c.color, c.label, c.desc));
     }
-    legend.appendChild(secFill);
+    body.appendChild(secFill);
   }
 
-  // ── Kind colours (always shown as reference) ──────────────────────
   const kinds = [...new Set(nodes.map((n) => n.kind))].sort();
   if (kinds.length > 0) {
     const secKind = document.createElement("div");
@@ -163,9 +180,10 @@ function renderLegend(container: HTMLElement, nodes: GraphNode[]): void {
       if (!c) continue;
       secKind.appendChild(legendItem(c.bg, c.border, KIND_LABELS[kind] ?? kind, ""));
     }
-    legend.appendChild(secKind);
+    body.appendChild(secKind);
   }
 
+  legend.appendChild(body);
   container.appendChild(legend);
 }
 
@@ -191,7 +209,7 @@ export function renderGraph(
         },
       })),
       ...edges
-        .filter((e) => validIds.has(e.source) && validIds.has(e.target))
+        .filter((e) => validIds.has(e.source) && validIds.has(e.target) && e.source !== e.target)
         .map((e) => ({ data: { source: e.source, target: e.target } })),
     ],
     style: [
@@ -260,15 +278,26 @@ export function renderGraph(
       },
     ],
     layout: {
-      name: "dagre",
-      rankDir: "BT",
-      rankSep: 60,
-      nodeSep: 24,
-      padding: 32,
+      name: "cola",
+      maxSimulationTime: 5000,
+      ungrabifyWhileSimulating: true,
+      fit: true,
+      padding: 30,
+      edgeLength: 90,
+      // Downward flow: edges prefer to point downward
+      flow: { axis: "x", minSeparation: 15 },
+      // Prevent disconnected components from drifting apart
+      infinite: false,
     } as any,
     minZoom: 0.15,
     maxZoom: 4,
     wheelSensitivity: 0.25,
+  });
+
+  // Ensure the graph is fitted to the viewport after layout settles.
+  cy.one("layoutstop", () => {
+    (cy.nodes() as any).show(); // cola may hide nodes during layout
+    cy.fit(undefined, 30);
   });
 
   cy.on("mouseover", "node", (e) => {

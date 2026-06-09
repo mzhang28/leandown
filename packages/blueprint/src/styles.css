@@ -76,7 +76,6 @@ html, body {
 
 #content {
   padding: 1.5rem 2rem;
-  max-width: 42rem;
 }
 
 #content.graph-mode {
@@ -194,13 +193,32 @@ html, body {
   max-width: 20rem;
 }
 
+.graph-legend-titlebar {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  cursor: pointer;
+  user-select: none;
+  padding: 0.1rem 0;
+}
+.graph-legend-titlebar:hover { opacity: 0.8; }
+
+.graph-legend-toggle {
+  font-size: 0.5rem;
+  color: #999;
+  flex-shrink: 0;
+}
+
 .graph-legend-title {
   font-weight: 600;
   font-size: 0.6875rem;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: #777;
-  margin-bottom: 0.25rem;
+}
+
+.graph-legend-body {
+  margin-top: 0.25rem;
 }
 
 .graph-legend-section {

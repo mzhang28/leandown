@@ -11,6 +11,12 @@ export function GraphPage() {
 
   useEffect(() => {
     document.title = "Dependency graph";
+    // Push layout chrome out of the way so the graph fills the viewport.
+    const content = document.getElementById("content");
+    if (content) content.classList.add("graph-mode");
+    return () => {
+      if (content) content.classList.remove("graph-mode");
+    };
   }, []);
 
   useEffect(() => {

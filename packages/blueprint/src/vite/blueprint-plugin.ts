@@ -44,14 +44,41 @@ function extractGraphData(srcDir: string): { nodes: any[]; edges: any[] } {
       const kind = m[1]!;
       const { label, attrs } = parseInfo(m[2] ?? "");
       if (!label) continue;
-      nodes.push({ id: label, label, kind, lean: attrs.lean, route });
+      const stated = !!attrs.lean;
+      const proved = stated && (attrs.proved !== undefined);
+      const mathlib = attrs.mathlib !== undefined;
+
+      nodes.push({
+        id: label, label, kind, lean: attrs.lean, route,
+        stated, proved, mathlib,
+      });
       if (attrs.uses) {
         for (const dep of attrs.uses.split(",").map((s: string) => s.trim()).filter(Boolean)) {
-          edges.push({ source: label, target: dep });
+          edges.push({ source: dep, target: label });
         }
       }
     }
   }
+
+  // Compute fullyProved: node and all its ancestors are proved.
+  const provedSet = new Set(nodes.filter((n) => n.proved || n.mathlib).map((n) => n.id));
+  const adjacency = new Map<string, string[]>();
+  for (const e of edges) {
+    const deps = adjacency.get(e.target) ?? [];
+    deps.push(e.source);
+    adjacency.set(e.target, deps);
+  }
+  function allAncestorsProved(id: string, visited = new Set<string>()): boolean {
+    if (visited.has(id)) return true;
+    visited.add(id);
+    const deps = adjacency.get(id);
+    if (!deps || deps.length === 0) return provedSet.has(id);
+    return provedSet.has(id) && deps.every((d) => allAncestorsProved(d, visited));
+  }
+  for (const node of nodes) {
+    node.fullyProved = allAncestorsProved(node.id);
+  }
+
   return { nodes, edges };
 }
 
@@ -106,7 +133,10 @@ export function blueprintVitePlugin(
     },
 
     load(id: string) {
-      if (!resolvedRoot) return;
+      if (!resolvedRoot) {
+        // Fallback: configResolved might not have fired yet
+        resolvedRoot = findProjectRoot(process.cwd()) ?? process.cwd();
+      }
       const srcDir = path.join(resolvedRoot, "src");
 
       if (id === RESOLVED_SUMMARY_MODULE) {

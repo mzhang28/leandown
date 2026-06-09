@@ -1,10 +1,9 @@
-import { useParams, useLocation } from "@tanstack/react-router";
+import { useParams } from "@tanstack/react-router";
 import { summary } from "@leandown/blueprint/summary";
-import { useEffect, useState } from "react";
+import { useContext, useEffect, useState } from "react";
+import { PagesContext } from "../main";
 
 type Entry = typeof summary[number] & { children?: Entry[] };
-
-const BASE = import.meta.env.BASE_URL ?? "/";
 
 function findEntry(entries: Entry[], route: string): Entry | undefined {
   for (const e of entries) {
@@ -16,25 +15,26 @@ function findEntry(entries: Entry[], route: string): Entry | undefined {
   }
 }
 
-const pages = import.meta.glob("./**/*.md", { query: "?import", import: "default" });
-
 export function MarkdownPage() {
   const { slug } = useParams({ strict: false }) as { slug?: string };
-  const location = useLocation();
+  const pages = useContext(PagesContext);
   const [html, setHtml] = useState<string | null>(null);
 
   const route = slug ?? (summary[0]?.route ?? "index");
   const entry = findEntry(summary as Entry[], route) ?? summary[0];
 
   useEffect(() => {
-    if (!entry) return;
+    if (!entry) {
+      setHtml("<p>Page not found.</p>");
+      return;
+    }
     const loader = pages[entry.srcPath];
     if (!loader) {
       setHtml("<p>Page not found.</p>");
       return;
     }
-    loader().then((mod: any) => {
-      setHtml(typeof mod === "string" ? mod : mod?.default ?? mod?.html ?? String(mod));
+    loader().then((mod) => {
+      setHtml(mod.default ?? mod.html ?? String(mod));
     });
   }, [entry?.srcPath]);
 
