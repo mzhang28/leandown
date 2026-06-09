@@ -5,6 +5,12 @@ import { initCommand } from "./commands/init.ts";
 import { buildCommand } from "./commands/build.ts";
 import { serveCommand } from "./commands/serve.ts";
 import { docsCommand } from "./commands/docs.ts";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import path from "node:path";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const pkg = JSON.parse(readFileSync(path.resolve(__dirname, "../package.json"), "utf-8"));
 
 const init = command({
   name: "init",
@@ -59,6 +65,15 @@ const docs = command({
   },
 });
 
+const versionCmd = command({
+  name: "version",
+  args: {},
+  description: "Print the version",
+  handler: () => {
+    console.log(pkg.version);
+  },
+});
+
 const blueprint = subcommands({
   name: "blueprint",
   description:
@@ -68,6 +83,7 @@ const blueprint = subcommands({
     build,
     serve,
     docs,
+    version: versionCmd,
   },
 });
 

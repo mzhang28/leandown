@@ -32,7 +32,10 @@ export class LeanLSPClient {
   private diagnosticsMap = new Map<string, any[]>();
   private legend: string[] = [];
 
-  constructor(private projectPath: string) {}
+  private projectPath: string;
+  constructor(projectPath: string) {
+    this.projectPath = projectPath;
+  }
 
   start(): Promise<void> {
     if (this.initPromise) return this.initPromise;

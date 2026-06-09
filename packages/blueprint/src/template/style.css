@@ -152,3 +152,42 @@ html, body {
 .blueprint-content > :first-child { margin-top: 0; }
 .blueprint-content > :last-child  { margin-bottom: 0; }
 
+/* ── Dependency graph legend ─────────────────────────────────────────────── */
+
+.graph-legend {
+  margin: 1.5rem 0 0;
+  padding: 1rem 1.25rem;
+  background: #fff;
+  border: 1px solid #e5e5e7;
+  border-radius: 8px;
+  max-width: fit-content;
+}
+
+.graph-legend-title {
+  font-weight: 600;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #555;
+  margin-bottom: 0.6rem;
+}
+
+.graph-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-right: 1rem;
+  margin-bottom: 0.35rem;
+  font-size: 0.8rem;
+  color: #333;
+}
+
+.graph-legend-swatch {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  border: 2px solid #aaa;
+  flex-shrink: 0;
+}
+

@@ -30,12 +30,60 @@ const KIND_COLORS: Record<string, { bg: string; border: string; text: string }> 
   note:        { bg: "#eeeeee", border: "#95a5a6", text: "#444444" },
 };
 
+const KIND_LABELS: Record<string, string> = {
+  theorem:     "Theorem",
+  definition:  "Definition",
+  lemma:       "Lemma",
+  proof:       "Proof",
+  proposition: "Proposition",
+  corollary:   "Corollary",
+  example:     "Example",
+  conjecture:  "Conjecture",
+  remark:      "Remark",
+  note:        "Note",
+};
+
+/** Build and append a colour legend for the dependency graph. */
+function renderLegend(container: HTMLElement, kinds: string[]): void {
+  const legend = document.createElement("div");
+  legend.className = "graph-legend";
+
+  const title = document.createElement("div");
+  title.className = "graph-legend-title";
+  title.textContent = "Legend";
+  legend.appendChild(title);
+
+  for (const kind of kinds) {
+    const colors = KIND_COLORS[kind];
+    if (!colors) continue;
+
+    const item = document.createElement("div");
+    item.className = "graph-legend-item";
+
+    const swatch = document.createElement("span");
+    swatch.className = "graph-legend-swatch";
+    swatch.style.backgroundColor = colors.bg;
+    swatch.style.borderColor = colors.border;
+
+    const label = document.createElement("span");
+    label.className = "graph-legend-label";
+    label.textContent = KIND_LABELS[kind] ?? kind;
+
+    item.appendChild(swatch);
+    item.appendChild(label);
+    legend.appendChild(item);
+  }
+
+  container.appendChild(legend);
+}
+
 export function renderGraph(
   container: HTMLElement,
   nodes: GraphNode[],
   edges: GraphEdge[],
   onNavigate?: (route: string) => void
 ): cytoscape.Core {
+  const kindsInGraph = [...new Set(nodes.map((n) => n.kind))];
   const validIds = new Set(nodes.map((n) => n.id));
 
   const cy = cytoscape({
@@ -127,6 +175,8 @@ export function renderGraph(
       if (route) onNavigate(route);
     });
   }
+
+  renderLegend(container, kindsInGraph);
 
   return cy;
 }

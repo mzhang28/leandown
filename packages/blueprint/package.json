@@ -32,6 +32,7 @@
       "types": "./graph.d.ts"
     },
     "./graph-renderer": {
+      "import": "./dist/vite/graph-renderer.js",
       "types": "./graph-renderer.d.ts"
     }
   },
