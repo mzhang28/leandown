@@ -1,5 +1,6 @@
 import { createServer } from "vite";
-import { findProjectRoot } from "../util.ts";
+import { findProjectRoot, readConfig } from "../util.ts";
+import { docsCommand } from "./docs.ts";
 import path from "node:path";
 import fs from "node:fs";
 
@@ -28,6 +29,15 @@ export async function serveCommand(): Promise<void> {
     );
     process.exit(1);
   }
+
+  // Kick off lake build :docs in the background so the dev server starts
+  // immediately. Docs become available at /docs/ once the build finishes.
+  try {
+    const cfg = readConfig(projectRoot);
+    if (cfg.leanProjectPath) {
+      docsCommand({ background: true }).catch(() => {});
+    }
+  } catch { /* no leanProjectPath, skip */ }
 
   console.log(`Starting dev server for blueprint in ${projectRoot}...\n`);
 

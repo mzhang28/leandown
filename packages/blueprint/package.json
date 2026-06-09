@@ -1,6 +1,6 @@
 {
   "name": "@leandown/blueprint",
-  "version": "0.0.10",
+  "version": "0.0.11",
   "description": "All-in-one CLI for managing Lean blueprint projects — markdown-based mathematical documents with Lean formalization tracking",
   "repository": {
     "url": "https://github.com/mzhang28/remark-lean"
@@ -27,6 +27,12 @@
     },
     "./summary": {
       "types": "./summary.d.ts"
+    },
+    "./graph": {
+      "types": "./graph.d.ts"
+    },
+    "./graph-renderer": {
+      "types": "./graph-renderer.d.ts"
     }
   },
   "publishConfig": {
@@ -45,23 +51,34 @@
       },
       "./summary": {
         "types": "./summary.d.ts"
+      },
+      "./graph": {
+        "types": "./graph.d.ts"
+      },
+      "./graph-renderer": {
+        "import": "./dist/vite/graph-renderer.js",
+        "types": "./graph-renderer.d.ts"
       }
     }
   },
   "files": [
     "dist",
     "src/template",
-    "summary.d.ts"
+    "summary.d.ts",
+    "graph.d.ts",
+    "graph-renderer.d.ts"
   ],
   "scripts": {
     "prepack": "bun run build",
-    "build": "bun run build:js && bun run build:dts && bun run build:templates",
+    "build": "bun run build:js && bun run build:browser && bun run build:dts && bun run build:templates",
     "build:js": "bun build src/index.ts src/vite/index.ts src/lean/analyzer.ts --outdir dist --format esm --target node --external vite --external unified --external remark --external remark-html --external @leandown/core --external @leandown/remark --external cmd-ts",
+    "build:browser": "bun build src/vite/graph-renderer.ts --outdir dist/vite --format esm --target browser",
     "build:dts": "tsc -p tsconfig.build.json",
     "build:templates": "rm -rf dist/template && cp -r src/template dist/template"
   },
   "devDependencies": {
     "@types/bun": "^1.3.14",
+    "@types/cytoscape": "^3.31.0",
     "@types/mdast": "^4.0.4",
     "@types/node": "latest",
     "typescript": "^5"
@@ -73,6 +90,8 @@
     "@leandown/core": "workspace:*",
     "@leandown/remark": "workspace:*",
     "cmd-ts": "^0.13.0",
+    "cytoscape": "^3.34.0",
+    "cytoscape-dagre": "^4.0.0",
     "remark": "^15.0.1",
     "remark-html": "^16.0.1",
     "unified": "^11.0.5",

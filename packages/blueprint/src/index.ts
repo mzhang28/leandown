@@ -4,6 +4,7 @@ import { command, subcommands, run, option, string, optional } from "cmd-ts";
 import { initCommand } from "./commands/init.ts";
 import { buildCommand } from "./commands/build.ts";
 import { serveCommand } from "./commands/serve.ts";
+import { docsCommand } from "./commands/docs.ts";
 
 const init = command({
   name: "init",
@@ -39,6 +40,15 @@ const serve = command({
   },
 });
 
+const docs = command({
+  name: "docs",
+  args: {},
+  description: "Build Lean documentation via lake build :docs",
+  handler: async () => {
+    await docsCommand();
+  },
+});
+
 const blueprint = subcommands({
   name: "blueprint",
   description:
@@ -47,6 +57,7 @@ const blueprint = subcommands({
     init,
     build,
     serve,
+    docs,
   },
 });
 

@@ -142,8 +142,9 @@ function renderDirective(d: ParsedDirective): string {
   // Chips
   const chips: string[] = [];
   if (leanDecls.length > 0) {
+    const title = `Lean: ${leanDecls.join(", ")}`;
     chips.push(
-      `<span class="blueprint-chip blueprint-chip--lean" title="Lean: ${leanDecls.join(", ")}">L∃∀N</span>`
+      `<a href="/docs/find/?pattern=${encodeURIComponent(leanDecls[0]!)}#doc" target="_blank" rel="noopener" class="blueprint-chip blueprint-chip--lean" title="${title}">L∃∀N</a>`
     );
   }
   if (usesLabels.length > 0) {
@@ -214,7 +215,6 @@ const blueprintRemarkPlugin: Plugin<[], Root> = function () {
   };
 };
 
-// Export the text-level processor for use in the Vite pipeline
 export { processDirectives, parseInfo, BLUEPRINT_KINDS };
 export type { ParsedDirective };
 

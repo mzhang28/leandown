@@ -72,6 +72,18 @@ html, body {
   max-width: 48rem;
 }
 
+#content.graph-mode {
+  padding: 0;
+  max-width: none;
+  height: 100vh;
+}
+
+.nav-graph {
+  margin-top: 1rem;
+  border-top: 1px solid #e5e5e7;
+  padding-top: 0.75rem;
+}
+
 /* ── Blueprint nodes ─────────────────────────────────────────────────────── */
 
 .blueprint-node {
@@ -132,9 +144,11 @@ html, body {
   cursor: default;
 }
 
-.blueprint-chip--lean  { background: #e8f4fd; color: #2471a3; }
+.blueprint-chip--lean  { background: #e8f4fd; color: #2471a3; text-decoration: none; cursor: pointer; transition: background 0.1s, color 0.1s; }
+.blueprint-chip--lean:hover { background: #c5e3f7; color: #1a5276; }
 .blueprint-chip--uses  { background: #fef3e0; color: #b8860b; }
 .blueprint-chip--owner { background: #f0e6f6; color: #7d3c98; }
 
 .blueprint-content > :first-child { margin-top: 0; }
 .blueprint-content > :last-child  { margin-bottom: 0; }
+

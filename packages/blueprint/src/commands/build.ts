@@ -1,5 +1,6 @@
 import { build as viteBuild } from "vite";
-import { findProjectRoot } from "../util.ts";
+import { findProjectRoot, readConfig } from "../util.ts";
+import { docsCommand } from "./docs.ts";
 import path from "node:path";
 import fs from "node:fs";
 
@@ -29,6 +30,14 @@ export async function buildCommand(): Promise<void> {
     );
     process.exit(1);
   }
+
+  // Build Lean docs first so the plugin can copy them into dist/docs/
+  try {
+    const cfg = readConfig(projectRoot);
+    if (cfg.leanProjectPath) {
+      await docsCommand();
+    }
+  } catch { /* no leanProjectPath, skip */ }
 
   console.log(`Building blueprint in ${projectRoot}...\n`);
 
