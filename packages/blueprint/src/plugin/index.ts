@@ -105,7 +105,7 @@ function parseInfo(
 /**
  * Render a parsed directive to HTML.
  */
-function renderDirective(d: ParsedDirective): string {
+function renderDirective(d: ParsedDirective, base = "/"): string {
   const dataAttrs: string[] = [`data-blueprint-kind="${d.kind}"`];
   if (d.label) dataAttrs.push(`data-blueprint-label="${d.label}"`);
 
@@ -144,7 +144,7 @@ function renderDirective(d: ParsedDirective): string {
   if (leanDecls.length > 0) {
     const title = `Lean: ${leanDecls.join(", ")}`;
     chips.push(
-      `<a href="/docs/find/?pattern=${encodeURIComponent(leanDecls[0]!)}#doc" target="_blank" rel="noopener" class="blueprint-chip blueprint-chip--lean" title="${title}">L∃∀N</a>`
+      `<a href="${base}docs/find/?pattern=${encodeURIComponent(leanDecls[0]!)}#doc" target="_blank" rel="noopener" class="blueprint-chip blueprint-chip--lean" title="${title}">L∃∀N</a>`
     );
   }
   if (usesLabels.length > 0) {
@@ -169,7 +169,7 @@ function renderDirective(d: ParsedDirective): string {
  * Process all blueprint `:::` directives in markdown text,
  * replacing them with rendered HTML.
  */
-function processDirectives(markdown: string): string {
+function processDirectives(markdown: string, base = "/"): string {
   let result = markdown;
   let iterations = 0;
   const maxIterations = 1000;
@@ -178,7 +178,7 @@ function processDirectives(markdown: string): string {
     const directive = parseDirective(result);
     if (!directive) break;
 
-    const html = renderDirective(directive);
+    const html = renderDirective(directive, base);
     result = result.replace(directive.fullMatch, html);
     iterations++;
   }

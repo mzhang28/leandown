@@ -4,6 +4,8 @@ import "@leandown/core/runtime";
 
 type Entry = typeof summary[number];
 
+const BASE = import.meta.env.BASE_URL; // e.g. "/" or "/myproject/"
+
 const pages = import.meta.glob("./**/*.md");
 
 function findEntry(entries: Entry[], route: string): Entry | undefined {
@@ -21,7 +23,7 @@ function renderNav(entries: Entry[], current: string, depth = 0): string {
   const items = entries.map((e) => {
     const active = e.route === current ? " active" : "";
     const sub = e.children?.length ? renderNav(e.children, current, depth + 1) : "";
-    return `<li><a href="/${e.route}" class="nav-link${active}">${e.title}</a>${sub}</li>`;
+    return `<li><a href="${BASE}${e.route}" class="nav-link${active}">${e.title}</a>${sub}</li>`;
   }).join("");
   return `<ul class="nav-list nav-depth-${depth}">${items}</ul>`;
 }
@@ -29,7 +31,13 @@ function renderNav(entries: Entry[], current: string, depth = 0): string {
 function renderSidebar(current: string): string {
   const graphActive = current === "graph" ? " active" : "";
   return renderNav(summary, current)
-    + `<div class="nav-graph"><a href="/graph" class="nav-link${graphActive}">Dependency graph</a></div>`;
+    + `<div class="nav-graph"><a href="${BASE}graph" class="nav-link${graphActive}">Dependency graph</a></div>`;
+}
+
+function currentRoute(): string {
+  const p = location.pathname;
+  return (p.startsWith(BASE) ? p.slice(BASE.length) : p.slice(1))
+    || (summary[0]?.route ?? "");
 }
 
 async function navigate(route: string) {
@@ -62,7 +70,7 @@ async function navigate(route: string) {
 }
 
 function push(route: string) {
-  history.pushState(null, "", `/${route}`);
+  history.pushState(null, "", BASE + route);
   navigate(route);
 }
 
@@ -70,14 +78,12 @@ document.addEventListener("click", (e) => {
   const a = (e.target as Element).closest("a[href]") as HTMLAnchorElement | null;
   if (!a || a.target === "_blank") return;
   const href = a.getAttribute("href")!;
-  if (href.startsWith("/") && !href.startsWith("//")) {
+  if (href.startsWith(BASE)) {
     e.preventDefault();
-    push(href.slice(1));
+    push(href.slice(BASE.length));
   }
 });
 
-window.addEventListener("popstate", () => {
-  navigate(location.pathname.slice(1) || (summary[0]?.route ?? ""));
-});
+window.addEventListener("popstate", () => navigate(currentRoute()));
 
-navigate(location.pathname.slice(1) || (summary[0]?.route ?? ""));
+navigate(currentRoute());

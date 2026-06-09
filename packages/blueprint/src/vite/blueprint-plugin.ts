@@ -80,6 +80,7 @@ export function blueprintVitePlugin(
 ): VitePlugin {
   let resolvedRoot: string | undefined;
   let resolvedLeanPath: string | undefined;
+  let resolvedBase = "/";
 
   return {
     name: "leandown-blueprint",
@@ -125,6 +126,8 @@ export function blueprintVitePlugin(
     },
 
     configResolved(config) {
+      resolvedBase = config.base ?? "/";
+
       if (options.projectRoot) {
         resolvedRoot = options.projectRoot;
       } else {
@@ -159,7 +162,8 @@ export function blueprintVitePlugin(
         ".woff2": "font/woff2",
         ".woff": "font/woff",
       };
-      server.middlewares.use("/docs", (req, res, _next) => {
+      const docsMount = resolvedBase.replace(/\/$/, "") + "/docs";
+      server.middlewares.use(docsMount, (req, res, _next) => {
         const reqPath = (req.url ?? "/").split("?")[0]!;
         const candidates = [
           path.join(docsDir, reqPath),
@@ -196,7 +200,7 @@ export function blueprintVitePlugin(
     async transform(code: string, id: string) {
       if (!id.endsWith(".md") || id.includes("node_modules")) return;
 
-      const withDirectives = processDirectives(code);
+      const withDirectives = processDirectives(code, resolvedBase);
 
       let html: string;
       try {
