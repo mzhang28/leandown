@@ -1,6 +1,6 @@
 {
   "name": "@leandown/core",
-  "version": "0.0.14",
+  "version": "0.0.15",
   "description": "Pluggable Lean 4 code highlighting via the Lean LSP",
   "repository": {
     "url": "https://github.com/mzhang28/remark-lean"

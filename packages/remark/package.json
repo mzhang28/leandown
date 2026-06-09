@@ -1,6 +1,6 @@
 {
   "name": "@leandown/remark",
-  "version": "0.0.14",
+  "version": "0.0.15",
   "description": "remark plugin for syntax-highlighting Lean 4 code blocks via the Lean LSP",
   "repository": {
     "url": "https://github.com/mzhang28/remark-lean"

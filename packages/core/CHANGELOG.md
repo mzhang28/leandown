@@ -1,5 +1,11 @@
 # @leandown/core
 
+## 0.0.15
+
+### Patch Changes
+
+- wtf bro
+
 ## 0.0.14
 
 ## 0.0.13

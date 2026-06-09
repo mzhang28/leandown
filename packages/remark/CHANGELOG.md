@@ -1,5 +1,13 @@
 # @leandown/remark
 
+## 0.0.15
+
+### Patch Changes
+
+- wtf bro
+- Updated dependencies
+  - @leandown/core@0.0.15
+
 ## 0.0.14
 
 ### Patch Changes
