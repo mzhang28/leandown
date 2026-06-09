@@ -6,4 +6,4 @@
 "@leandown/remark": patch
 ---
 
-wip
+improve blueprint
