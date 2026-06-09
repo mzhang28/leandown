@@ -1,5 +1,13 @@
 # @leandown/blueprint
 
+## 0.0.14
+
+### Patch Changes
+
+- FML
+  - @leandown/core@0.0.14
+  - @leandown/remark@0.0.14
+
 ## 0.0.13
 
 ### Patch Changes

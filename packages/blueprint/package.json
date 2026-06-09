@@ -1,6 +1,6 @@
 {
   "name": "@leandown/blueprint",
-  "version": "0.0.13",
+  "version": "0.0.14",
   "description": "All-in-one CLI for managing Lean blueprint projects — markdown-based mathematical documents with Lean formalization tracking",
   "repository": {
     "url": "https://github.com/mzhang28/remark-lean"
@@ -77,8 +77,9 @@
   ],
   "scripts": {
     "prepack": "bun run build",
-    "build": "bun run build:js && bun run build:browser && bun run build:dts && bun run build:templates",
+    "build": "bun run build:js && bun run build:browser && bun run build:dts && bun run build:templates && bun run build:app",
     "build:js": "bun build src/index.ts src/vite/index.ts src/lean/analyzer.ts --outdir dist --format esm --target node --external vite --external unified --external remark --external remark-html --external @leandown/core --external @leandown/remark --external cmd-ts",
+    "build:app": "bun build src/app/main.tsx --outdir dist/app --format esm --target browser --external react --external react-dom --external react-dom/client --external @tanstack/react-router --external @leandown/blueprint/summary --external @leandown/blueprint/graph --external @leandown/blueprint/graph-renderer --external @leandown/blueprint/styles.css --external @leandown/core/runtime",
     "build:browser": "bun build src/vite/graph-renderer.ts --outdir dist/vite --format esm --target browser",
     "build:dts": "tsc -p tsconfig.build.json",
     "build:templates": "rm -rf dist/template && cp -r src/template dist/template && cp src/styles.css dist/styles.css"
