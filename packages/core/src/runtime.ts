@@ -37,6 +37,64 @@ export function isControllerActive(c: TooltipController, activeTooltips: Tooltip
   });
 }
 
+export interface LeanAwaitContentOptions {
+  /** API endpoint that returns `{ content, pager?, title? }` JSON. */
+  url: string;
+  /** Element or selector for the main rendered content. */
+  content: string | HTMLElement;
+  /** Optional element or selector for prev/next pager markup. */
+  pager?: string | HTMLElement;
+}
+
+function resolveElement(target: string | HTMLElement): HTMLElement | null {
+  return typeof target === "string" ? document.querySelector<HTMLElement>(target) : target;
+}
+
+/**
+ * Fetches deferred Lean-rendered content, swaps it into the page, and hydrates tooltips.
+ */
+export async function leanAwaitContent(options: LeanAwaitContentOptions): Promise<void> {
+  const contentEl = resolveElement(options.content);
+  if (!contentEl) {
+    throw new Error("leanAwaitContent: content element not found");
+  }
+
+  const response = await fetch(options.url);
+  if (!response.ok) {
+    throw new Error(`leanAwaitContent: request failed (${response.status})`);
+  }
+
+  const data = (await response.json()) as {
+    content: string;
+    pager?: string;
+    title?: string;
+  };
+
+  contentEl.innerHTML = data.content;
+  contentEl.removeAttribute("aria-busy");
+
+  if (options.pager && data.pager) {
+    const pagerEl = resolveElement(options.pager);
+    if (pagerEl) pagerEl.innerHTML = data.pager;
+  }
+
+  if (data.title) {
+    document.title = data.title;
+  }
+
+  leanHydrate();
+}
+
+function resolveHoverElement(target: HTMLElement | null): HTMLElement | null {
+  if (!target) return null;
+  // Diagnostic squiggles wrap token hovers; Lean shows the diagnostic, not inner spans.
+  const squiggly = target.closest(
+    ".lean-squiggly-error[data-hover-id], .lean-squiggly-warning[data-hover-id]"
+  ) as HTMLElement | null;
+  if (squiggly) return squiggly;
+  return target.closest("[data-hover-id], [data-hover]") as HTMLElement | null;
+}
+
 export function leanHydrate(options: SetupOptions = {}) {
   const hoveredClass = options.hoveredClass || "lean-hovered";
   const tooltipClass = options.tooltipClass || "lean-tooltip";
@@ -108,22 +166,16 @@ export function leanHydrate(options: SetupOptions = {}) {
 
     (tooltip as any)._leanHoverData = hoverData;
 
+    // Match Lean: show only the hover for the most specific (innermost) region.
     const hoverIds: string[] = [];
     const directHovers: string[] = [];
-    let current: HTMLElement | null = el;
-    while (current) {
-      const hoverId = current.getAttribute("data-hover-id");
-      if (hoverId) {
-        hoverIds.push(hoverId);
-      }
-      const directHover = current.getAttribute("data-hover");
-      if (directHover) {
-        directHovers.push(directHover);
-      }
-      if (current.tagName === "PRE" || current.tagName === "BODY") {
-        break;
-      }
-      current = current.parentElement;
+    const hoverId = el.getAttribute("data-hover-id");
+    if (hoverId) {
+      hoverIds.push(hoverId);
+    }
+    const directHover = el.getAttribute("data-hover");
+    if (directHover) {
+      directHovers.push(directHover);
     }
 
     const uniqueHtmls: string[] = [];
@@ -229,7 +281,7 @@ export function leanHydrate(options: SetupOptions = {}) {
   document.addEventListener("mouseover", (e) => {
     const target = e.target as HTMLElement | null;
     const symbol = target?.closest("[data-symbol]");
-    const hover = target?.closest("[data-hover-id], [data-hover]") as HTMLElement | null;
+    const hover = resolveHoverElement(target);
 
     if (symbol) {
       const symbolValue = symbol.getAttribute("data-symbol");
@@ -264,7 +316,7 @@ export function leanHydrate(options: SetupOptions = {}) {
     const target = e.target as HTMLElement | null;
     const relatedTarget = e.relatedTarget as HTMLElement | null;
     const symbol = target?.closest("[data-symbol]");
-    const hover = target?.closest("[data-hover-id], [data-hover]") as HTMLElement | null;
+    const hover = resolveHoverElement(target);
 
     if (symbol) {
       const symbolValue = symbol.getAttribute("data-symbol");
@@ -279,7 +331,7 @@ export function leanHydrate(options: SetupOptions = {}) {
     }
 
     if (hover && pendingTooltipElement === hover) {
-      const relatedHover = relatedTarget?.closest("[data-hover-id], [data-hover]");
+      const relatedHover = resolveHoverElement(relatedTarget);
       if (relatedHover !== hover) {
         if (pendingTooltipTimeout) {
           clearTimeout(pendingTooltipTimeout);
