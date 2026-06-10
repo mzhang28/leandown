@@ -119,7 +119,7 @@
       },
     },
     "packages/mdbook": {
-      "name": "mdbook",
+      "name": "@leandown/mdbook",
       "devDependencies": {
         "@types/bun": "latest",
       },
@@ -452,6 +452,8 @@
     "@leandown/core": ["@leandown/core@workspace:packages/core"],
 
     "@leandown/markdown-it": ["@leandown/markdown-it@workspace:packages/markdown-it"],
+
+    "@leandown/mdbook": ["@leandown/mdbook@workspace:packages/mdbook"],
 
     "@leandown/remark": ["@leandown/remark@workspace:packages/remark"],
 
@@ -1200,8 +1202,6 @@
     "mdast-util-to-markdown": ["mdast-util-to-markdown@2.1.2", "", { "dependencies": { "@types/mdast": "^4.0.0", "@types/unist": "^3.0.0", "longest-streak": "^3.0.0", "mdast-util-phrasing": "^4.0.0", "mdast-util-to-string": "^4.0.0", "micromark-util-classify-character": "^2.0.0", "micromark-util-decode-string": "^2.0.0", "unist-util-visit": "^5.0.0", "zwitch": "^2.0.0" } }, "sha512-xj68wMTvGXVOKonmog6LwyJKrYXZPvlwabaryTjLh9LuvovB/KAH+kvi8Gjj+7rJjsFi23nkUxRQv1KqSroMqA=="],
 
     "mdast-util-to-string": ["mdast-util-to-string@4.0.0", "", { "dependencies": { "@types/mdast": "^4.0.0" } }, "sha512-0H44vDimn51F0YwvxSJSm0eCDOJTRlmN0R1yBh4HLj9wiV1Dn0QoXGbvFAWj2hSItVTlCmBF1hqKlIyUBVFLPg=="],
-
-    "mdbook": ["mdbook@workspace:packages/mdbook"],
 
     "mdn-data": ["mdn-data@2.27.1", "", {}, "sha512-9Yubnt3e8A0OKwxYSXyhLymGW4sCufcLG6VdiDdUGVkPhpqLxlvP5vl1983gQjJl3tqbrM731mjaZaP68AgosQ=="],
 
