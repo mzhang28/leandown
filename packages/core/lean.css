@@ -397,3 +397,37 @@ pre code.language-lean {
   opacity: 0.85;
 }
 
+/* Lean compile / LSP loading indicator */
+.lean-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  min-height: 12rem;
+  padding: 3rem 1.5rem;
+  color: var(--lean-fg);
+  text-align: center;
+}
+
+.lean-loading-spinner {
+  width: 2rem;
+  height: 2rem;
+  border: 3px solid var(--lean-border);
+  border-top-color: var(--lean-function);
+  border-radius: 50%;
+  animation: lean-loading-spin 0.8s linear infinite;
+}
+
+.lean-loading-message {
+  margin: 0;
+  font-size: 0.95rem;
+  color: var(--lean-comment);
+}
+
+@keyframes lean-loading-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+

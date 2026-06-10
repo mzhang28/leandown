@@ -1,4 +1,10 @@
-import { LeanHighlightProcessor, wrapLeanCodeBlock, LeanLSPClient } from "@leandown/core";
+import {
+  LeanHighlightProcessor,
+  wrapLeanCodeBlock,
+  LeanLSPClient,
+  renderLeanLoadingIndicator,
+  LEAN_LOADING_DEFAULT_MESSAGE,
+} from "@leandown/core";
 import type { LeanHighlightOptions } from "@leandown/core";
 import type { Plugin } from "unified";
 import type { Root, Code } from "mdast";
@@ -12,7 +18,12 @@ export interface RemarkLeanOptions {
 }
 
 // Re-export core types for backwards compatibility
-export { LeanLSPClient, wrapLeanCodeBlock };
+export {
+  LeanLSPClient,
+  wrapLeanCodeBlock,
+  renderLeanLoadingIndicator,
+  LEAN_LOADING_DEFAULT_MESSAGE,
+};
 
 const remarkLean: Plugin<[RemarkLeanOptions?], Root> = function (options: RemarkLeanOptions = {}) {
   const processor = new LeanHighlightProcessor({
