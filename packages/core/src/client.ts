@@ -22,6 +22,15 @@ import {
 } from "./lib.ts";
 import { type LeanHighlightBackend, HtmlBackend } from "./backend.ts";
 
+/** Max time to wait for Lean to finish processing a temp file before highlighting. */
+const COMPILE_TIMEOUT_MS = 30_000;
+
+export interface LeanHighlightResult {
+  html: string;
+  /** False when highlighting ran before `$/lean/fileProgress` reported completion. */
+  compileComplete: boolean;
+}
+
 export class LeanLSPClient {
   private proc: ChildProcess | null = null;
   private initPromise: Promise<void> | null = null;
@@ -106,7 +115,7 @@ export class LeanLSPClient {
       compileMarkdown?: (markdown: string) => Promise<string> | string;
       backend?: LeanHighlightBackend;
     }
-  ): Promise<string> {
+  ): Promise<LeanHighlightResult> {
     if (!this.proc) {
       await this.start();
     }
@@ -149,11 +158,15 @@ export class LeanLSPClient {
       },
     });
 
+    let compileComplete = false;
     await Promise.race([
       new Promise<void>((resolve) =>
-        this.compileWaiters.set(tempFileUri, resolve)
+        this.compileWaiters.set(tempFileUri, () => {
+          compileComplete = true;
+          resolve();
+        })
       ),
-      new Promise<void>((resolve) => setTimeout(resolve, 1500)),
+      new Promise<void>((resolve) => setTimeout(resolve, COMPILE_TIMEOUT_MS)),
     ]);
 
     const tokensRes = await this.sendRequest(
@@ -588,10 +601,10 @@ export class LeanLSPClient {
       const hoverDataScript = `<script type="application/json" class="lean-hover-data">${JSON.stringify(
         registry
       )}</script>`;
-      return codeHtml + hoverDataScript;
+      return { html: codeHtml + hoverDataScript, compileComplete };
     }
 
-    return codeHtml;
+    return { html: codeHtml, compileComplete };
   }
 
   async shutdown(): Promise<void> {

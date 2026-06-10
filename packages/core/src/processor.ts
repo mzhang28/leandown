@@ -1,5 +1,11 @@
 import { LeanLSPClient } from "./client.ts";
-import { getCachedHighlight, setCachedHighlight, hashContent, CACHE_VERSION } from "./cache.ts";
+import {
+  getCachedHighlight,
+  setCachedHighlight,
+  hashContent,
+  CACHE_VERSION,
+  computeProjectFingerprint,
+} from "./cache.ts";
 import { wrapLeanCodeBlock } from "./html.ts";
 import { type LeanHighlightBackend, HtmlBackend } from "./backend.ts";
 import os from "node:os";
@@ -100,9 +106,17 @@ process.on("SIGTERM", () => { cleanupClients(); process.exit(0); });
 export class LeanHighlightProcessor {
   private cumulativeContent = "";
   private options: LeanHighlightOptions;
+  private projectFingerprint: string | null = null;
 
   constructor(options: LeanHighlightOptions) {
     this.options = options;
+  }
+
+  private getProjectFingerprint(projectPath: string): string {
+    if (this.projectFingerprint === null) {
+      this.projectFingerprint = computeProjectFingerprint(projectPath);
+    }
+    return this.projectFingerprint;
   }
 
   /**
@@ -124,18 +138,22 @@ export class LeanHighlightProcessor {
       prependCode: this.cumulativeContent,
       syncHovers,
       backend: backend.name,
+      projectFingerprint: this.getProjectFingerprint(projectPath),
     }));
 
     let highlighted = await getCachedHighlight(cacheKey, this.options.cacheDir);
 
     if (!highlighted) {
-      highlighted = await client.highlight(content, {
+      const result = await client.highlight(content, {
         synchronizedHovers: syncHovers,
         prependCode: this.cumulativeContent,
         compileMarkdown: this.options.compileMarkdown,
         backend,
       });
-      await setCachedHighlight(cacheKey, highlighted, this.options.cacheDir);
+      highlighted = result.html;
+      if (result.compileComplete) {
+        await setCachedHighlight(cacheKey, highlighted, this.options.cacheDir);
+      }
     }
 
     this.cumulativeContent += content + "\n\n";
