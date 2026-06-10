@@ -42,7 +42,7 @@ export interface LeanHighlightBackend {
 }
 
 export class HtmlBackend implements LeanHighlightBackend {
-  readonly name = "html";
+  readonly name: string = "html";
 
   readonly capabilities = {
     hovers: true,
@@ -171,3 +171,8 @@ export class TypstBackend implements LeanHighlightBackend {
     return '")]';
   }
 }
+
+export class MarkdownBackend extends HtmlBackend {
+  override readonly name = "markdown";
+}
+

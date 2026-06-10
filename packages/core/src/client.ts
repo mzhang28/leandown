@@ -597,7 +597,7 @@ export class LeanLSPClient {
       ? backend.joinLines(highlightedLines)
       : highlightedLines.join("\n");
 
-    if (backend.name === "html") {
+    if (backend.capabilities?.hovers) {
       const hoverDataScript = `<script type="application/json" class="lean-hover-data">${JSON.stringify(
         registry
       )}</script>`;

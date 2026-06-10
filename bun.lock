@@ -1,6 +1,5 @@
 {
   "lockfileVersion": 1,
-  "configVersion": 1,
   "workspaces": {
     "": {
       "devDependencies": {
@@ -42,7 +41,7 @@
     },
     "packages/blueprint": {
       "name": "@leandown/blueprint",
-      "version": "0.0.12",
+      "version": "0.0.15",
       "bin": {
         "blueprint": "./dist/index.js",
       },
@@ -73,7 +72,7 @@
     },
     "packages/comark": {
       "name": "@leandown/comark",
-      "version": "0.0.12",
+      "version": "0.0.15",
       "dependencies": {
         "@leandown/core": "workspace:*",
       },
@@ -88,7 +87,7 @@
     },
     "packages/core": {
       "name": "@leandown/core",
-      "version": "0.0.12",
+      "version": "0.0.15",
       "dependencies": {
         "@floating-ui/dom": "^1.7.6",
         "@libsql/client": "^0.17.3",
@@ -106,7 +105,7 @@
     },
     "packages/markdown-it": {
       "name": "@leandown/markdown-it",
-      "version": "0.0.12",
+      "version": "0.0.15",
       "dependencies": {
         "@leandown/core": "workspace:*",
       },
@@ -119,9 +118,18 @@
         "markdown-it": ">=13.0.0",
       },
     },
+    "packages/mdbook": {
+      "name": "mdbook",
+      "devDependencies": {
+        "@types/bun": "latest",
+      },
+      "peerDependencies": {
+        "typescript": "^5",
+      },
+    },
     "packages/remark": {
       "name": "@leandown/remark",
-      "version": "0.0.12",
+      "version": "0.0.15",
       "dependencies": {
         "@leandown/core": "workspace:*",
         "remark": "^15.0.1",
@@ -1192,6 +1200,8 @@
     "mdast-util-to-markdown": ["mdast-util-to-markdown@2.1.2", "", { "dependencies": { "@types/mdast": "^4.0.0", "@types/unist": "^3.0.0", "longest-streak": "^3.0.0", "mdast-util-phrasing": "^4.0.0", "mdast-util-to-string": "^4.0.0", "micromark-util-classify-character": "^2.0.0", "micromark-util-decode-string": "^2.0.0", "unist-util-visit": "^5.0.0", "zwitch": "^2.0.0" } }, "sha512-xj68wMTvGXVOKonmog6LwyJKrYXZPvlwabaryTjLh9LuvovB/KAH+kvi8Gjj+7rJjsFi23nkUxRQv1KqSroMqA=="],
 
     "mdast-util-to-string": ["mdast-util-to-string@4.0.0", "", { "dependencies": { "@types/mdast": "^4.0.0" } }, "sha512-0H44vDimn51F0YwvxSJSm0eCDOJTRlmN0R1yBh4HLj9wiV1Dn0QoXGbvFAWj2hSItVTlCmBF1hqKlIyUBVFLPg=="],
+
+    "mdbook": ["mdbook@workspace:packages/mdbook"],
 
     "mdn-data": ["mdn-data@2.27.1", "", {}, "sha512-9Yubnt3e8A0OKwxYSXyhLymGW4sCufcLG6VdiDdUGVkPhpqLxlvP5vl1983gQjJl3tqbrM731mjaZaP68AgosQ=="],
 

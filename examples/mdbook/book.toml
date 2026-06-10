@@ -1,0 +1,11 @@
+[book]
+title = "mdbook leandown example"
+authors = ["Michael Zhang"]
+language = "en"
+
+[preprocessor.leandown]
+command = "bun run ../../packages/mdbook"
+
+[output.html]
+additional-js=["leandown.js"]
+additional-css=["leandown.css"]

@@ -96,6 +96,7 @@ function resolveHoverElement(target: HTMLElement | null): HTMLElement | null {
 }
 
 export function leanHydrate(options: SetupOptions = {}) {
+  console.log("Lean hydration started");
   const hoveredClass = options.hoveredClass || "lean-hovered";
   const tooltipClass = options.tooltipClass || "lean-tooltip";
 
@@ -370,5 +371,8 @@ export function leanHydrate(options: SetupOptions = {}) {
       }
     }
   });
+
+  const blockCount = document.querySelectorAll(".lean-hover-data").length;
+  console.log(`Lean hydration ended. Hydrated ${blockCount} block(s).`);
 }
 
