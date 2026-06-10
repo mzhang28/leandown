@@ -40,6 +40,7 @@ export interface DiagnosticPosition {
   severity: number;
   message: string;
   hoverId: string;
+  isEvalOrCheck?: boolean;
 }
 
 export interface DiagnosticSpan {

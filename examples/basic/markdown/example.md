@@ -55,6 +55,7 @@ Let's evaluate some expressions and check some types:
 #eval 1 + 1
 #check Nat.add
 #check "Hello"
+#eval IO.println "Line 1\nLine 2\nLine 3"
 ```
 
 ## Errors and Warnings

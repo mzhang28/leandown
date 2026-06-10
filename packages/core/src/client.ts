@@ -470,12 +470,15 @@ export class LeanLSPClient {
           hoverMap[id] = targetBlankHtml;
         }
 
+        const isEvalOrCheck = /^\s*(#eval|#check)\b/.test(lineText);
+
         lineDiagnostics.set(lineIndex, [
           {
             character: pos,
             severity: highestSeverity,
             message: combinedMessage,
             hoverId: id,
+            isEvalOrCheck,
           },
         ]);
       }

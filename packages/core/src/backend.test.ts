@@ -1,6 +1,6 @@
 import { describe, test, expect } from "bun:test";
 import { HtmlBackend, TypstBackend } from "./backend.ts";
-import type { Token } from "./lib.ts";
+import type { Token, DiagnosticPosition } from "./lib.ts";
 
 describe("HtmlBackend", () => {
   const backend = new HtmlBackend();
@@ -46,6 +46,43 @@ describe("HtmlBackend", () => {
     };
     expect(backend.renderTokenStart(token2)).toBe(
       '<span class="lean-function" data-symbol="ref-1-2" data-permalink="https://github.com/..." data-is-definition="true">'
+    );
+  });
+
+  test("renderDiagnostic", () => {
+    // Standard diagnostic marker
+    const diag1: DiagnosticPosition = {
+      character: 5,
+      severity: 3,
+      message: "some info",
+      hoverId: "h1",
+    };
+    expect(backend.renderDiagnostic(diag1)).toBe(
+      '<span class="lean-diagnostic-marker lean-diagnostic-info" data-hover-id="h1">…</span>'
+    );
+
+    // Single-line #eval or #check diagnostic
+    const diagEvalSingle: DiagnosticPosition = {
+      character: 5,
+      severity: 3,
+      message: "2",
+      hoverId: "h2",
+      isEvalOrCheck: true,
+    };
+    expect(backend.renderDiagnostic(diagEvalSingle)).toBe(
+      '<span class="lean-diagnostic-inline" data-hover-id="h2">2</span>'
+    );
+
+    // Multi-line #eval or #check diagnostic
+    const diagEvalMulti: DiagnosticPosition = {
+      character: 5,
+      severity: 3,
+      message: "line 1\nline 2\nline 3",
+      hoverId: "h3",
+      isEvalOrCheck: true,
+    };
+    expect(backend.renderDiagnostic(diagEvalMulti)).toBe(
+      '<details class="lean-diagnostic-details"><summary class="lean-diagnostic-summary" data-hover-id="h3">line 1</summary><span class="lean-diagnostic-expanded">\nline 2\nline 3</span></details>'
     );
   });
 });

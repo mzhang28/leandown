@@ -353,6 +353,58 @@ pre code.language-lean {
   opacity: 1;
 }
 
+/* Inline diagnostics (e.g. #eval and #check output) */
+.lean-diagnostic-inline {
+  display: block;
+  color: var(--lean-goal-marker);
+  margin-left: 20px;
+}
+
+.lean-diagnostic-details {
+  display: block;
+  margin-left: 20px;
+}
+
+.lean-diagnostic-summary {
+  display: inline;
+  color: var(--lean-goal-marker);
+  cursor: pointer;
+  outline: none;
+}
+
+.lean-diagnostic-details summary::-webkit-details-marker {
+  display: none;
+}
+.lean-diagnostic-details summary {
+  list-style: none;
+}
+
+.lean-diagnostic-summary::after {
+  content: " ▸";
+  font-style: normal;
+  font-size: 0.8em;
+  opacity: 0.7;
+  transition: transform 0.15s ease;
+  display: inline-block;
+}
+
+.lean-diagnostic-details[open] .lean-diagnostic-summary::after {
+  content: " ▾";
+}
+
+.lean-diagnostic-summary:hover {
+  text-decoration: underline;
+}
+
+.lean-diagnostic-expanded {
+  display: block;
+  color: var(--lean-goal-marker);
+  margin-left: 0px;
+  opacity: 0.95;
+  white-space: pre;
+}
+
+
 
 /* Squiggly underline annotations (error / warning)
    Uses a repeating SVG tile for a tight, controlled wave amplitude.

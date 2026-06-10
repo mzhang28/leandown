@@ -35,8 +35,15 @@
 <body>
   <div id="content"></div>
   <script type="module">
-    import { leanHydrate } from "@leandown/core/runtime";
-    leanHydrate();
+    import { leanAwaitContent } from "@leandown/core/runtime";
+    const contentEl = document.getElementById("content");
+    const chapter = contentEl.dataset.leanChapter;
+    if (chapter) {
+      leanAwaitContent({
+        url: `/_lean/render/${encodeURIComponent(chapter)}`,
+        content: contentEl,
+      });
+    }
   </script>
 </body>
 

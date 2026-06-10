@@ -89,6 +89,25 @@ export class HtmlBackend implements LeanHighlightBackend {
         : diagnostic.severity === 2
         ? "lean-diagnostic-warning"
         : "lean-diagnostic-info";
+
+    if (diagnostic.isEvalOrCheck) {
+      const msgLines = diagnostic.message.split(/\r?\n/);
+      const firstLine = msgLines[0] || "";
+      const restLines = msgLines.slice(1).join("\n");
+
+      if (restLines) {
+        return `<details class="lean-diagnostic-details"><summary class="lean-diagnostic-summary" data-hover-id="${
+          diagnostic.hoverId
+        }">${escapeHtml(firstLine)}</summary><span class="lean-diagnostic-expanded">\n${escapeHtml(
+          restLines
+        )}</span></details>`;
+      } else {
+        return `<span class="lean-diagnostic-inline" data-hover-id="${
+          diagnostic.hoverId
+        }">${escapeHtml(firstLine)}</span>`;
+      }
+    }
+
     return `<span class="lean-diagnostic-marker ${severityClass}" data-hover-id="${
       diagnostic.hoverId
     }">…</span>`;
