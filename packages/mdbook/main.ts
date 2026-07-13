@@ -26,12 +26,12 @@ async function processMarkdown(content: string, processor: LeanHighlightProcesso
     const code = match[1];
     // Process the code block sequentially
     const html = await processor.processBlock(code);
-    
+
     // Append content before the match and the processed HTML
     result += content.slice(lastIndex, match.index) + html;
     lastIndex = regex.lastIndex;
   }
-  
+
   result += content.slice(lastIndex);
   return result;
 }
@@ -44,7 +44,7 @@ async function main() {
   try {
     const input = fs.readFileSync(0, 'utf-8');
     const parsed = JSON.parse(input);
-    
+
     let book: any;
     if (Array.isArray(parsed)) {
       book = parsed[1];
@@ -58,14 +58,14 @@ async function main() {
       backend: new MarkdownBackend(),
       compileMarkdown: (markdown) => md.render(markdown),
     });
-    
+
     // Process all chapters
     const items = book.sections || book.items || [];
     for (const item of items) {
       processor.resetDocument();
       await processItem(item, processor);
     }
-    
+
     // Make sure we shut down the processor LSP client properly
     await processor.shutdown();
 

@@ -3,13 +3,19 @@
   "module": "index.ts",
   "type": "module",
   "private": true,
+  "bin": {
+    "mdbook-leandown": "./dist/main.js"
+  },
   "scripts": {
-    "build": "bun build runtime-entry.ts --outfile dist/leandown.js --target browser && cp ../core/lean.css dist/leandown.css"
+    "build": "bun build main.ts --outfile dist/main.js --target node & bun build runtime-entry.ts --outfile dist/index.js --target browser && cp ../core/lean.css dist/leandown.css"
   },
   "devDependencies": {
     "@types/bun": "latest"
   },
   "peerDependencies": {
     "typescript": "^5"
+  },
+  "dependencies": {
+    "cmd-ts": "^0.15.0"
   }
 }
