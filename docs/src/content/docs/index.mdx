@@ -1,5 +1,5 @@
 ---
-title: remark-lean
+title: leandown
 description: A remark plugin that provides interactive, IDE-like features for Lean code blocks in Markdown.
 template: splash
 ---
@@ -9,10 +9,10 @@ import { Card, CardGrid } from '@astrojs/starlight/components';
 export const base = import.meta.env.BASE_URL;
 export const cleanBase = base.endsWith('/') ? base : `${base}/`;
 export const introLink = `${cleanBase}overview/intro/`;
-export const githubLink = "https://github.com/mzhang28/remark-lean";
+export const githubLink = "https://github.com/mzhang28/leandown";
 
 <div class="hero-container">
-  <h1>remark-lean</h1>
+  <h1>leandown</h1>
   <p class="tagline">Interactive Lean environments in Markdown.</p>
   <div class="cta-group">
     <a href={introLink} class="btn btn-primary">Get Started</a>

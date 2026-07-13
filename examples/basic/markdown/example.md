@@ -40,7 +40,7 @@ theorem cantor (f : S → Set S) : ¬ Surjective f := by
 > def nestedHello (name : String) : String := "Nested " ++ name
 > ```
 
-Here is a non-Lean code block to ensure it is ignored by remark-lean:
+Here is a non-Lean code block to ensure it is ignored by leandown:
 
 ```javascript
 const message = "Hello, JavaScript!";
@@ -69,5 +69,3 @@ def unusedWarning : Nat :=
   let x := 5
   10
 ```
-
-

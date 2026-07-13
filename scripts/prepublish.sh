@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# prepublish.sh — Prepares the remark-lean package for npm publication.
+# prepublish.sh — Prepares the leandown package for npm publication.
 #
 # Steps performed:
 #   1. Validate the working tree is clean (no uncommitted changes)
@@ -40,10 +40,10 @@ done
 # ── Paths ─────────────────────────────────────────────────────────────────────
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-PKG_DIR="$REPO_ROOT/packages/remark-lean"
+PKG_DIR="$REPO_ROOT/packages/leandown"
 
 echo -e "\n${BOLD}═══════════════════════════════════════════════${RESET}"
-echo -e "${BOLD}   remark-lean — bun publish preparation${RESET}"
+echo -e "${BOLD}   leandown — bun publish preparation${RESET}"
 echo -e "${BOLD}═══════════════════════════════════════════════${RESET}\n"
 
 # ── 1. Git checks ─────────────────────────────────────────────────────────────

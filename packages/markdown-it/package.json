@@ -3,7 +3,7 @@
   "version": "0.0.15",
   "description": "markdown-it plugin for syntax-highlighting Lean 4 code blocks via the Lean LSP",
   "repository": {
-    "url": "https://github.com/mzhang28/remark-lean"
+    "url": "https://github.com/mzhang28/leandown"
   },
   "main": "dist/index.js",
   "module": "dist/index.js",

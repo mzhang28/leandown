@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 // https://astro.build/config
 export default defineConfig({
   site: 'https://mzhang28.github.io',
-  base: '/remark-lean',
+  base: '/leandown',
   markdown: {
     remarkPlugins: [
       [remarkLean, { leanProjectPath: fileURLToPath(new URL('../examples/basic/lean', import.meta.url)) }]
@@ -15,10 +15,10 @@ export default defineConfig({
   },
   integrations: [
     starlight({
-      title: 'remark-lean',
-      social: [{ icon: 'github', label: 'GitHub', href: 'https://github.com/mzhang28/remark-lean' }],
+      title: 'leandown',
+      social: [{ icon: 'github', label: 'GitHub', href: 'https://github.com/mzhang28/leandown' }],
       sidebar: [
-        { label: 'Overview', 
+        { label: 'Overview',
           items: [
         { label: 'Intro', slug: 'overview/intro' },
         { label: 'Roadmap', slug: 'overview/roadmap' },

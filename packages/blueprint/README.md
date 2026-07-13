@@ -3,7 +3,7 @@
 All-in-one CLI for managing Lean blueprint projects — markdown-based mathematical
 documents with Lean formalization tracking.
 
-Built on [leandown](https://github.com/mzhang28/remark-lean) (remark + Lean LSP)
+Built on [leandown](https://github.com/mzhang28/leandown) (remark + Lean LSP)
 and [Vite](https://vitejs.dev/).
 
 ## Quick Start
