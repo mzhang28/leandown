@@ -1,6 +1,11 @@
 {
   "name": "@leandown/mdbook",
+  "version": "0.0.15",
+  "description": "mdbook plugin for syntax-highlighting Lean 4 code blocks via the Lean LSP",
   "module": "index.ts",
+  "repository": {
+    "url": "https://github.com/mzhang28/leandown"
+  },
   "type": "module",
   "private": true,
   "bin": {

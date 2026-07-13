@@ -8,7 +8,8 @@
       "@leandown/remark",
       "@leandown/markdown-it",
       "@leandown/comark",
-      "@leandown/blueprint"
+      "@leandown/blueprint",
+      "@leandown/mdbook"
     ]
   ],
   "linked": [],
