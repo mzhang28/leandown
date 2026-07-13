@@ -7,7 +7,6 @@
     "url": "https://github.com/mzhang28/leandown"
   },
   "type": "module",
-  "private": true,
   "bin": {
     "mdbook-leandown": "./dist/main.js"
   },
