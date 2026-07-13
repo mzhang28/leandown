@@ -24,6 +24,7 @@
     "typescript": "^5"
   },
   "dependencies": {
+    "@leandown/core": "^0.0.15",
     "cmd-ts": "^0.15.0"
   }
 }

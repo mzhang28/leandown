@@ -120,10 +120,12 @@
     },
     "packages/mdbook": {
       "name": "@leandown/mdbook",
+      "version": "0.0.16",
       "bin": {
-        "mdbook-leandown": "./dist/cli.js",
+        "mdbook-leandown": "./dist/main.js",
       },
       "dependencies": {
+        "@leandown/core": "^0.0.15",
         "cmd-ts": "^0.15.0",
       },
       "devDependencies": {
@@ -1680,6 +1682,8 @@
     "@babel/helper-create-class-features-plugin/semver": ["semver@6.3.1", "", { "bin": { "semver": "bin/semver.js" } }, "sha512-BR7VvDCVHO+q2xBEWskxS6DJE1qRnb7DxzUrogb71CWoSficBxYsiAGd+Kl0mmq/MprG9yArRkyrQxTO6XjMzA=="],
 
     "@inquirer/editor/@inquirer/external-editor": ["@inquirer/external-editor@3.0.3", "", { "dependencies": { "chardet": "^2.1.1", "iconv-lite": "^0.7.2" }, "peerDependencies": { "@types/node": ">=18" }, "optionalPeers": ["@types/node"] }, "sha512-6thf5I8q7lZwzGLAxPaaGEREEkZ3nyePPDQ1oyobblxmEE8mqTLguScP7pDjUTAibiyb4hfXl+qjUEJ+di/aNA=="],
+
+    "@leandown/mdbook/@leandown/core": ["@leandown/core@0.0.15", "", { "dependencies": { "@floating-ui/dom": "^1.7.6", "@libsql/client": "^0.17.3", "escape-html": "^1.0.3" }, "peerDependencies": { "typescript": "^5" } }, "sha512-NkOV6GztbYKaG0MH55p27SkZjFsuXUaXiD9WucqmtHCbkix5gBjvuySUs36hSqbVNpK7EeqHIuLFmy4Uxd+wnw=="],
 
     "@leandown/mdbook/cmd-ts": ["cmd-ts@0.15.0", "", { "dependencies": { "chalk": "^5.4.1", "debug": "^4.4.1", "didyoumean": "^1.2.2", "strip-ansi": "^7.1.0" } }, "sha512-ASyAx+P6DNzNEZ6OYmvjjaLAQeI3L+4lm5rX2Jg8tondXdj06o9JTxi9mfC92KoVbrVFKhZ+j2TfBF8fcura6g=="],
 

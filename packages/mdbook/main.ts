@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import * as fs from 'fs';
 import MarkdownIt from 'markdown-it';
-import { LeanHighlightProcessor, MarkdownBackend } from '../core/src/index.ts';
+import { LeanHighlightProcessor, MarkdownBackend } from '@leandown/core';
 
 // Walk the book items recursively
 async function processItem(item: any, processor: LeanHighlightProcessor) {
