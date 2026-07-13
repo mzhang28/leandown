@@ -15,7 +15,7 @@
   ],
   "scripts": {
     "prepack": "bun run build && chmod +x dist/main.js",
-    "build": "bun build main.ts --outfile dist/main.js --target node & bun build runtime-entry.ts --outfile dist/index.js --target browser && cp ../core/lean.css dist/leandown.css"
+    "build": "bun build main.ts --outfile dist/main.js --packages external --target node & bun build runtime-entry.ts --outfile dist/index.js --target browser && cp ../core/lean.css dist/leandown.css"
   },
   "devDependencies": {
     "@types/bun": "latest"
@@ -24,7 +24,8 @@
     "typescript": "^5"
   },
   "dependencies": {
-    "@leandown/core": "^0.0.15",
-    "cmd-ts": "^0.15.0"
+    "@leandown/core": "^0.0.16",
+    "cmd-ts": "^0.15.0",
+    "markdown-it": "^14.3.0"
   }
 }
