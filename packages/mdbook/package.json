@@ -1,6 +1,6 @@
 {
   "name": "@leandown/mdbook",
-  "version": "0.0.17",
+  "version": "0.0.18",
   "description": "mdbook plugin for syntax-highlighting Lean 4 code blocks via the Lean LSP",
   "module": "index.ts",
   "repository": {
@@ -24,7 +24,7 @@
     "typescript": "^5"
   },
   "dependencies": {
-    "@leandown/core": "^0.0.16",
+    "@leandown/core": "^0.0.18",
     "cmd-ts": "^0.15.0",
     "markdown-it": "^14.3.0"
   }
