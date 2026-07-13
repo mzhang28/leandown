@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 import * as fs from 'fs';
 import MarkdownIt from 'markdown-it';
 import { LeanHighlightProcessor, MarkdownBackend } from '../core/src/index.ts';

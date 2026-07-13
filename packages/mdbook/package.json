@@ -1,6 +1,6 @@
 {
   "name": "@leandown/mdbook",
-  "version": "0.0.15",
+  "version": "0.0.16",
   "description": "mdbook plugin for syntax-highlighting Lean 4 code blocks via the Lean LSP",
   "module": "index.ts",
   "repository": {
@@ -10,7 +10,11 @@
   "bin": {
     "mdbook-leandown": "./dist/main.js"
   },
+  "files": [
+    "dist"
+  ],
   "scripts": {
+    "prepack": "bun run build && chmod +x dist/main.js",
     "build": "bun build main.ts --outfile dist/main.js --target node & bun build runtime-entry.ts --outfile dist/index.js --target browser && cp ../core/lean.css dist/leandown.css"
   },
   "devDependencies": {
