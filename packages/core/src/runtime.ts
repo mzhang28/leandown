@@ -95,7 +95,20 @@ function resolveHoverElement(target: HTMLElement | null): HTMLElement | null {
   return target.closest("[data-hover-id], [data-hover]") as HTMLElement | null;
 }
 
+/**
+ * Teardown for the most recent `leanHydrate` call. `leanAwaitContent` re-hydrates
+ * after every content swap (pager/SPA navigation); without disposing the previous
+ * run first, each navigation would stack another full set of global listeners over
+ * stale tooltip state, duplicating tooltips and leaking memory.
+ */
+let disposeHydrate: (() => void) | null = null;
+
 export function leanHydrate(options: SetupOptions = {}) {
+  if (disposeHydrate) {
+    disposeHydrate();
+    disposeHydrate = null;
+  }
+
   console.log("Lean hydration started");
   const hoveredClass = options.hoveredClass || "lean-hovered";
   const tooltipClass = options.tooltipClass || "lean-tooltip";
@@ -279,7 +292,7 @@ export function leanHydrate(options: SetupOptions = {}) {
   let pendingTooltipTimeout: ReturnType<typeof setTimeout> | null = null;
   let pendingTooltipElement: HTMLElement | null = null;
 
-  document.addEventListener("mouseover", (e) => {
+  const onMouseOver = (e: MouseEvent) => {
     const target = e.target as HTMLElement | null;
     const symbol = target?.closest("[data-symbol]");
     const hover = resolveHoverElement(target);
@@ -311,9 +324,9 @@ export function leanHydrate(options: SetupOptions = {}) {
         pendingTooltipElement = null;
       }
     }
-  });
+  };
 
-  document.addEventListener("mouseout", (e) => {
+  const onMouseOut = (e: MouseEvent) => {
     const target = e.target as HTMLElement | null;
     const relatedTarget = e.relatedTarget as HTMLElement | null;
     const symbol = target?.closest("[data-symbol]");
@@ -341,9 +354,9 @@ export function leanHydrate(options: SetupOptions = {}) {
         }
       }
     }
-  });
+  };
 
-  document.addEventListener("click", (e) => {
+  const onClick = (e: MouseEvent) => {
     const target = e.target as HTMLElement | null;
     const symbol = target?.closest("[data-symbol]");
     if (symbol) {
@@ -370,7 +383,24 @@ export function leanHydrate(options: SetupOptions = {}) {
         }
       }
     }
-  });
+  };
+
+  document.addEventListener("mouseover", onMouseOver);
+  document.addEventListener("mouseout", onMouseOut);
+  document.addEventListener("click", onClick);
+
+  disposeHydrate = () => {
+    document.removeEventListener("mouseover", onMouseOver);
+    document.removeEventListener("mouseout", onMouseOut);
+    document.removeEventListener("click", onClick);
+    if (pendingTooltipTimeout) {
+      clearTimeout(pendingTooltipTimeout);
+      pendingTooltipTimeout = null;
+    }
+    pendingTooltipElement = null;
+    [...activeTooltips].forEach((c) => c.close());
+    activeTooltips = [];
+  };
 
   const blockCount = document.querySelectorAll(".lean-hover-data").length;
   console.log(`Lean hydration ended. Hydrated ${blockCount} block(s).`);

@@ -77,8 +77,12 @@ function getClient(projectPath: string): LeanLSPClient {
 function cleanupClients() {
   if (isShuttingDown) return;
   isShuttingDown = true;
+  // Kill synchronously: on exit/signal the process won't stay alive long enough
+  // to await the graceful shutdown request, so `proc.kill()` must run directly
+  // (otherwise `lake serve` children are orphaned and the temp dir is deleted
+  // out from under a still-running server).
   for (const client of clientPool.values()) {
-    client.shutdown();
+    client.killSync();
   }
   if (tempProjectPath) {
     const resolvedPath = path.resolve(tempProjectPath);

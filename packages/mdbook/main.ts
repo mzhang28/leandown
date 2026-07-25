@@ -60,18 +60,21 @@ async function main() {
       compileMarkdown: (markdown) => md.render(markdown),
     });
 
-    // Process all chapters
-    const items = book.sections || book.items || [];
-    for (const item of items) {
-      processor.resetDocument();
-      await processItem(item, processor);
+    try {
+      // Process all chapters
+      const items = book.sections || book.items || [];
+      for (const item of items) {
+        processor.resetDocument();
+        await processItem(item, processor);
+      }
+
+      // Write the modified book JSON object to stdout
+      process.stdout.write(JSON.stringify(book));
+    } finally {
+      // Always shut down the pooled Lean LSP child, even if processing threw —
+      // otherwise the subprocess is left dangling on the error path.
+      await processor.shutdown();
     }
-
-    // Make sure we shut down the processor LSP client properly
-    await processor.shutdown();
-
-    // Write the modified book JSON object to stdout
-    process.stdout.write(JSON.stringify(book));
   } catch (error) {
     console.error('Preprocessor error:', error);
     process.exit(1);

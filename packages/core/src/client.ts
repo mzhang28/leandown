@@ -25,6 +25,15 @@ import { type LeanHighlightBackend, HtmlBackend } from "./backend.ts";
 /** Max time to wait for Lean to finish processing a temp file before highlighting. */
 const COMPILE_TIMEOUT_MS = 30_000;
 
+/** Max time to wait for a single LSP request/response before rejecting. */
+const REQUEST_TIMEOUT_MS = 60_000;
+
+interface PendingRequest {
+  resolve: (res: any) => void;
+  reject: (err: Error) => void;
+  timer: ReturnType<typeof setTimeout>;
+}
+
 export interface LeanHighlightResult {
   html: string;
   /** False when highlighting ran before `$/lean/fileProgress` reported completion. */
@@ -36,7 +45,7 @@ export class LeanLSPClient {
   private initPromise: Promise<void> | null = null;
   private buffer = Buffer.alloc(0);
   private nextRequestId = 1;
-  private pendingRequests = new Map<number, (res: any) => void>();
+  private pendingRequests = new Map<number, PendingRequest>();
   private compileWaiters = new Map<string, () => void>();
   private diagnosticsMap = new Map<string, any[]>();
   private legend: string[] = [];
@@ -58,6 +67,13 @@ export class LeanLSPClient {
 
       this.proc.on("error", (err) => {
         console.error("Lean LSP Process Error:", err);
+        this.failAllPending(err instanceof Error ? err : new Error(String(err)));
+      });
+
+      this.proc.on("exit", (code, signal) => {
+        this.failAllPending(
+          new Error(`Lean LSP process exited (code ${code}, signal ${signal})`)
+        );
       });
 
       const initRes = await this.sendRequest("initialize", {
@@ -158,16 +174,26 @@ export class LeanLSPClient {
       },
     });
 
+    try {
     let compileComplete = false;
-    await Promise.race([
-      new Promise<void>((resolve) =>
-        this.compileWaiters.set(tempFileUri, () => {
-          compileComplete = true;
-          resolve();
-        })
-      ),
-      new Promise<void>((resolve) => setTimeout(resolve, COMPILE_TIMEOUT_MS)),
-    ]);
+    // Wait for `$/lean/fileProgress` completion, or fall back to a timeout.
+    // Both the waiter map entry and the timer are cleaned up once settled so
+    // neither leaks (the timer would otherwise keep the event loop alive).
+    await new Promise<void>((resolve) => {
+      let settled = false;
+      const done = () => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        this.compileWaiters.delete(tempFileUri);
+        resolve();
+      };
+      const timer = setTimeout(done, COMPILE_TIMEOUT_MS);
+      this.compileWaiters.set(tempFileUri, () => {
+        compileComplete = true;
+        done();
+      });
+    });
 
     const tokensRes = await this.sendRequest(
       "textDocument/semanticTokens/full",
@@ -425,7 +451,6 @@ export class LeanLSPClient {
     }
 
     const diagnostics = this.diagnosticsMap.get(tempFileUri) || [];
-    this.diagnosticsMap.delete(tempFileUri);
 
     const localDiagnostics = diagnostics.filter((d) => {
       const line = d.range.start.line - prependLines;
@@ -577,10 +602,6 @@ export class LeanLSPClient {
       return formatted;
     });
 
-    this.sendNotification("textDocument/didClose", {
-      textDocument: { uri: tempFileUri },
-    });
-
     const wordsObj: Record<string, any> = {};
     for (const [word, info] of wordMap.entries()) {
       wordsObj[word] = {
@@ -608,6 +629,20 @@ export class LeanLSPClient {
     }
 
     return { html: codeHtml, compileComplete };
+    } finally {
+      // Always tell the server to close the document and drop per-URI state,
+      // even if a request rejected partway through — otherwise the document
+      // stays open server-side and diagnosticsMap/compileWaiters entries leak.
+      try {
+        this.sendNotification("textDocument/didClose", {
+          textDocument: { uri: tempFileUri },
+        });
+      } catch {
+        // process may have already exited; nothing more to clean up on the wire
+      }
+      this.diagnosticsMap.delete(tempFileUri);
+      this.compileWaiters.delete(tempFileUri);
+    }
   }
 
   async shutdown(): Promise<void> {
@@ -618,21 +653,57 @@ export class LeanLSPClient {
       } catch (e) {
         // process might have already exited
       }
+      this.killSync();
+    }
+  }
+
+  /**
+   * Synchronously terminate the child process. Safe to call from `exit`/signal
+   * handlers where async `shutdown()` can't complete. Rejects/settles anything
+   * still in flight so no promise, timer, or child process is left dangling.
+   */
+  killSync(): void {
+    this.failAllPending(new Error("Lean LSP client terminated"));
+    for (const resolve of this.compileWaiters.values()) resolve();
+    this.compileWaiters.clear();
+    if (this.proc) {
       this.proc.kill();
       this.proc = null;
     }
   }
 
+  /** Reject every in-flight request and clear its timeout. */
+  private failAllPending(err: Error): void {
+    for (const pending of this.pendingRequests.values()) {
+      clearTimeout(pending.timer);
+      pending.reject(err);
+    }
+    this.pendingRequests.clear();
+  }
+
   private sendRequest(method: string, params: any): Promise<any> {
     const id = this.nextRequestId++;
-    return new Promise((res) => {
-      this.pendingRequests.set(id, res);
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        if (this.pendingRequests.delete(id)) {
+          reject(new Error(`LSP request timed out: ${method} (id ${id})`));
+        }
+      }, REQUEST_TIMEOUT_MS);
+      // Don't let a pending request keep the process alive on its own.
+      timer.unref?.();
+      this.pendingRequests.set(id, { resolve, reject, timer });
       const payload = JSON.stringify({ jsonrpc: "2.0", id, method, params });
       const message = `Content-Length: ${Buffer.byteLength(
         payload,
         "utf8"
       )}\r\n\r\n${payload}`;
-      this.proc!.stdin!.write(message);
+      try {
+        this.proc!.stdin!.write(message);
+      } catch (err) {
+        this.pendingRequests.delete(id);
+        clearTimeout(timer);
+        reject(err instanceof Error ? err : new Error(String(err)));
+      }
     });
   }
 
@@ -673,9 +744,10 @@ export class LeanLSPClient {
       try {
         const msg = JSON.parse(messageJson);
         if (msg.id !== undefined && this.pendingRequests.has(msg.id)) {
-          const resolveFn = this.pendingRequests.get(msg.id);
+          const pending = this.pendingRequests.get(msg.id)!;
           this.pendingRequests.delete(msg.id);
-          resolveFn!(msg);
+          clearTimeout(pending.timer);
+          pending.resolve(msg);
         } else if (msg.method === "$/lean/fileProgress") {
           const { uri } = msg.params.textDocument;
           const processing = msg.params.processing;

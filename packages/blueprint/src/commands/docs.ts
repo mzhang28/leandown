@@ -54,13 +54,31 @@ export async function docsCommand(opts: DocsOptions = {}): Promise<void> {
 
   if (opts.background) {
     const out = fs.openSync(logPath, "w");
+    let outClosed = false;
+    const closeOut = () => {
+      if (outClosed) return;
+      outClosed = true;
+      try {
+        fs.closeSync(out);
+      } catch {
+        // already closed
+      }
+    };
     const child = spawn("lake", ["build", ":docs"], {
       cwd: leanDir,
       stdio: ["ignore", out, out],
       detached: false,
     });
+    // Without an error handler a missing `lake` (ENOENT) emits an unhandled
+    // 'error' event and crashes the dev server; the fd would also leak.
+    child.on("error", (err) => {
+      closeOut();
+      console.error(
+        `[blueprint] failed to run lake build :docs: ${err.message}.  See ${logPath}`,
+      );
+    });
     child.on("close", (code) => {
-      fs.closeSync(out);
+      closeOut();
       if (code === 0)
         console.log("[blueprint] Lean docs ready at /docs/");
       else
