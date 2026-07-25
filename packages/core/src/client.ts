@@ -66,8 +66,18 @@ export class LeanLSPClient {
       });
 
       this.proc.on("error", (err) => {
-        console.error("Lean LSP Process Error:", err);
-        this.failAllPending(err instanceof Error ? err : new Error(String(err)));
+        const e = err instanceof Error ? err : new Error(String(err));
+        // ENOENT here means `lake` isn't on PATH — the most common setup
+        // mistake. Turn the cryptic "spawn lake ENOENT" into actionable text.
+        const friendly =
+          (e as NodeJS.ErrnoException).code === "ENOENT"
+            ? new Error(
+                "leandown: could not launch `lake`. Lean 4 must be installed " +
+                  "and on your PATH. Install it via elan: https://lean-lang.org/install/"
+              )
+            : e;
+        console.error("Lean LSP Process Error:", friendly.message);
+        this.failAllPending(friendly);
       });
 
       this.proc.on("exit", (code, signal) => {

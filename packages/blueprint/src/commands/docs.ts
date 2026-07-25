@@ -73,8 +73,12 @@ export async function docsCommand(opts: DocsOptions = {}): Promise<void> {
     // 'error' event and crashes the dev server; the fd would also leak.
     child.on("error", (err) => {
       closeOut();
+      const hint =
+        (err as NodeJS.ErrnoException).code === "ENOENT"
+          ? "  `lake` not found — install Lean 4 via elan: https://lean-lang.org/install/"
+          : `  See ${logPath}`;
       console.error(
-        `[blueprint] failed to run lake build :docs: ${err.message}.  See ${logPath}`,
+        `[blueprint] failed to run lake build :docs: ${err.message}.\n${hint}`,
       );
     });
     child.on("close", (code) => {

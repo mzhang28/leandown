@@ -22,6 +22,7 @@ const pkgDirs = [
   "packages/markdown-it",
   "packages/comark",
   "packages/blueprint",
+  "packages/mdbook",
   "docs",
   "examples/basic/markdown",
 ];

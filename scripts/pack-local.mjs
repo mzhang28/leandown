@@ -36,6 +36,7 @@ const PACK_ORDER = [
   "packages/markdown-it",
   "packages/comark",
   "packages/blueprint",
+  "packages/mdbook",
 ];
 
 const packed = [];   // [{ name, tgzPath }]

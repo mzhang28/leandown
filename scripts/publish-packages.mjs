@@ -22,12 +22,15 @@ const root = resolve(__dirname, "..");
 
 const dryRun = process.argv.includes("--dry-run") || process.env.DRY_RUN === "true";
 
+// Order matters: a package must appear after every workspace package it
+// depends on, so `versionMap` can resolve its `workspace:*` deps.
 const PUBLISH_ORDER = [
   "packages/core",
   "packages/remark",
-  // "packages/markdown-it",
-  // "packages/comark",
+  "packages/markdown-it",
+  "packages/comark",
   "packages/blueprint",
+  "packages/mdbook",
 ];
 
 // --- Build a version map of all workspace packages ---
@@ -79,9 +82,17 @@ try {
       for (const [key, value] of Object.entries(pkg.publishConfig)) {
         if (key !== "registry" && key !== "access") {
           pkg[key] = value;
+          // Remove the promoted key from publishConfig. npm only recognizes a
+          // fixed set of publishConfig keys (registry/access/tag/…); leaving a
+          // non-standard one like `exports` there triggers a deprecation warning
+          // and npm has announced it will stop working in a future major.
+          delete pkg.publishConfig[key];
           needsPatch = true;
           console.log(`  ${pkg.name}: promoted publishConfig.${key} to top-level`);
         }
+      }
+      if (Object.keys(pkg.publishConfig).length === 0) {
+        delete pkg.publishConfig;
       }
     }
 
@@ -101,7 +112,21 @@ try {
         stdio: "inherit",
       });
     } catch (err) {
-      console.warn(`  ⚠ Failed to publish ${dir}: ${err.message}`);
+      const msg = `Failed to publish ${dir}: ${err.message}`;
+      // In a dry run, hitting an already-published version is expected and
+      // shouldn't stop us from validating the packaging of every other package.
+      if (dryRun) {
+        console.warn(`  ⚠ ${msg} (continuing — dry run)`);
+        continue;
+      }
+      // Real run: abort immediately. Continuing would publish downstream
+      // packages that depend on a version we just failed to push, producing a
+      // broken release that npm can't cleanly roll back.
+      throw new Error(
+        `${msg}\n` +
+          `Aborting — packages already published before this point are live; ` +
+          `bump versions before retrying.`
+      );
     }
   }
 
@@ -110,14 +135,10 @@ try {
     console.log("\n[Dry Run] Skipping git tagging.");
   } else {
     console.log("\nTagging releases...");
-    try {
-      execSync("bun run changeset tag", {
-        cwd: root,
-        stdio: "inherit",
-      });
-    } catch (err) {
-      console.error(`Failed to tag releases: ${err.message}`);
-    }
+    execSync("bun run changeset tag", {
+      cwd: root,
+      stdio: "inherit",
+    });
   }
   console.log(`\n✓ Publishing and tagging completed successfully.${dryRun ? " (DRY RUN)" : ""}`);
 
