@@ -193,14 +193,38 @@ export function blueprintVitePlugin(
         ".woff": "font/woff",
       };
       const docsMount = resolvedBase.replace(/\/$/, "") + "/docs";
+      // Containment boundary for path-traversal protection. Any resolved
+      // candidate must live at or below this prefix.
+      const docsRoot = path.resolve(docsDir);
+      const docsPrefix = docsRoot + path.sep;
       server.middlewares.use(docsMount, (req, res, _next) => {
-        const reqPath = (req.url ?? "/").split("?")[0]!;
+        const rawPath = (req.url ?? "/").split("?")[0]!.split("#")[0]!;
+        let reqPath: string;
+        try {
+          reqPath = decodeURIComponent(rawPath);
+        } catch {
+          // Malformed percent-encoding (e.g. "%2"): reject rather than guess.
+          res.writeHead(400, { "Content-Type": "text/plain; charset=utf-8" });
+          res.end("Bad Request");
+          return;
+        }
+        // Reject NUL bytes outright (can truncate paths in some syscalls).
+        if (reqPath.includes("\0")) {
+          res.writeHead(400, { "Content-Type": "text/plain; charset=utf-8" });
+          res.end("Bad Request");
+          return;
+        }
         const candidates = [
-          path.join(docsDir, reqPath),
-          path.join(docsDir, reqPath, "index.html"),
-          path.join(docsDir, reqPath.replace(/\/$/, ""), "index.html"),
+          path.resolve(docsRoot, "." + reqPath),
+          path.resolve(docsRoot, "." + reqPath, "index.html"),
+          path.resolve(docsRoot, "." + reqPath.replace(/\/$/, ""), "index.html"),
         ];
         for (const filePath of candidates) {
+          // Containment check: the resolved path must be docsRoot itself or a
+          // descendant of it. Blocks "/docs/../../../etc/passwd" and friends.
+          if (filePath !== docsRoot && !filePath.startsWith(docsPrefix)) {
+            continue;
+          }
           try {
             if (fs.statSync(filePath).isFile()) {
               res.setHeader("Content-Type", MIME[path.extname(filePath)] ?? "application/octet-stream");
