@@ -1,5 +1,11 @@
 # @leandown/core
 
+## 0.0.19
+
+### Patch Changes
+
+- febec4c: some updates
+
 ## 0.0.15
 
 ### Patch Changes
