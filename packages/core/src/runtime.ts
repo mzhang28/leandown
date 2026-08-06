@@ -96,6 +96,19 @@ function resolveHoverElement(target: HTMLElement | null): HTMLElement | null {
 }
 
 /**
+ * The innermost annotated span under the cursor — the one whose tooltip is shown.
+ * Falls back to `[data-symbol]` for spans that carry a symbol but no hover text
+ * (punctuation and type ascriptions inside a declaration, for instance).
+ */
+function resolveHighlightElement(target: HTMLElement | null): HTMLElement | null {
+  if (!target) return null;
+  return (
+    resolveHoverElement(target) ??
+    (target.closest("[data-symbol]") as HTMLElement | null)
+  );
+}
+
+/**
  * Teardown for the most recent `leanHydrate` call. `leanAwaitContent` re-hydrates
  * after every content swap (pager/SPA navigation); without disposing the previous
  * run first, each navigation would stack another full set of global listeners over
@@ -114,6 +127,26 @@ export function leanHydrate(options: SetupOptions = {}) {
   const tooltipClass = options.tooltipClass || "lean-tooltip";
 
   let activeTooltips: TooltipController[] = [];
+
+  /**
+   * Highlight only the innermost annotated span under the cursor.
+   *
+   * This used to broadcast `hoveredClass` to every span sharing the hovered
+   * element's `data-symbol`. That reads as a whole-block highlight whenever the
+   * language server reports one definition for many distinct tokens — in a Lait
+   * DSL block, ~70 spans per page resolve to a single Lean constant, so hovering
+   * a bound variable lit up the enclosing expressions and unrelated literals
+   * elsewhere on the page. Tracking one element (rather than removing the class
+   * by re-querying) also means a missed `mouseout` cannot leave a stale
+   * highlight behind.
+   */
+  let highlightedEl: HTMLElement | null = null;
+  const setHighlight = (el: HTMLElement | null) => {
+    if (highlightedEl === el) return;
+    highlightedEl?.classList.remove(hoveredClass);
+    highlightedEl = el;
+    el?.classList.add(hoveredClass);
+  };
 
   function updateTooltips() {
     for (const c of activeTooltips) {
@@ -294,17 +327,9 @@ export function leanHydrate(options: SetupOptions = {}) {
 
   const onMouseOver = (e: MouseEvent) => {
     const target = e.target as HTMLElement | null;
-    const symbol = target?.closest("[data-symbol]");
     const hover = resolveHoverElement(target);
 
-    if (symbol) {
-      const symbolValue = symbol.getAttribute("data-symbol");
-      if (symbolValue) {
-        document.querySelectorAll(`[data-symbol="${CSS.escape(symbolValue)}"]`).forEach((el) => {
-          el.classList.add(hoveredClass);
-        });
-      }
-    }
+    setHighlight(resolveHighlightElement(target));
 
     if (hover) {
       if (pendingTooltipElement !== hover && hover.dataset.hasTooltip !== "true") {
@@ -329,20 +354,12 @@ export function leanHydrate(options: SetupOptions = {}) {
   const onMouseOut = (e: MouseEvent) => {
     const target = e.target as HTMLElement | null;
     const relatedTarget = e.relatedTarget as HTMLElement | null;
-    const symbol = target?.closest("[data-symbol]");
     const hover = resolveHoverElement(target);
 
-    if (symbol) {
-      const symbolValue = symbol.getAttribute("data-symbol");
-      const relatedSymbol = relatedTarget?.closest("[data-symbol]");
-      if (!relatedSymbol || relatedSymbol.getAttribute("data-symbol") !== symbolValue) {
-        if (symbolValue) {
-          document.querySelectorAll(`[data-symbol="${CSS.escape(symbolValue)}"]`).forEach((el) => {
-            el.classList.remove(hoveredClass);
-          });
-        }
-      }
-    }
+    // `mouseout` fires before the matching `mouseover`, so hand the highlight
+    // straight to wherever the cursor is going; leaving the page entirely gives
+    // a null `relatedTarget`, which clears it.
+    setHighlight(resolveHighlightElement(relatedTarget));
 
     if (hover && pendingTooltipElement === hover) {
       const relatedHover = resolveHoverElement(relatedTarget);
@@ -398,6 +415,7 @@ export function leanHydrate(options: SetupOptions = {}) {
       pendingTooltipTimeout = null;
     }
     pendingTooltipElement = null;
+    setHighlight(null);
     [...activeTooltips].forEach((c) => c.close());
     activeTooltips = [];
   };

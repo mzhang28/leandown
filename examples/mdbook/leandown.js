@@ -1,1 +1,1 @@
-../../packages/mdbook/dist/leandown.js
+../../packages/mdbook/dist/index.js
