@@ -130,15 +130,24 @@ try {
     }
   }
 
-  // --- Run changeset tag ---
+  // --- Tag each published package ---
+  // Matches the `@scope/name@version` tag convention used by earlier releases.
   if (dryRun) {
     console.log("\n[Dry Run] Skipping git tagging.");
   } else {
     console.log("\nTagging releases...");
-    execSync("bun run changeset tag", {
-      cwd: root,
-      stdio: "inherit",
-    });
+    for (const [name, version] of versionMap) {
+      const tag = `${name}@${version}`;
+      try {
+        execSync(`git tag ${tag}`, { cwd: root, stdio: "pipe" });
+        console.log(`  ✓ ${tag}`);
+      } catch {
+        // An existing tag means this version was already tagged locally; the
+        // publish above still succeeded, so don't fail the release over it.
+        console.warn(`  ⚠ tag ${tag} already exists — skipping`);
+      }
+    }
+    console.log("\nPush them with: git push --tags");
   }
   console.log(`\n✓ Publishing and tagging completed successfully.${dryRun ? " (DRY RUN)" : ""}`);
 
