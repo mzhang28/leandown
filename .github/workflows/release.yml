@@ -40,6 +40,7 @@ jobs:
           bun run --cwd packages/markdown-it build
           bun run --cwd packages/comark build
           bun run --cwd packages/blueprint build
+          bun run --cwd packages/mdbook build
 
       - name: Verify packed exports resolve to .js (not .ts)
         run: node scripts/verify-publish.mjs

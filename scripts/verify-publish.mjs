@@ -10,7 +10,7 @@
  *   4. Restores the original package.json
  *   5. Deletes the tarball
  *
- * Exits 1 if any package's packed exports still reference .ts files.
+ * Exits 1 if any package's packed exports or bins still reference .ts files.
  */
 
 import { readFileSync, writeFileSync, mkdirSync, rmSync, readdirSync } from "node:fs";
@@ -27,6 +27,7 @@ const PACK_ORDER = [
   "packages/markdown-it",
   "packages/comark",
   "packages/blueprint",
+  "packages/mdbook",
 ];
 
 const versionMap = new Map();
@@ -81,12 +82,24 @@ for (const dir of PACK_ORDER) {
     const raw = execSync(`tar -xOf ${tgzPath} package/package.json`, { encoding: "utf8" });
     const packed = JSON.parse(raw);
 
-    console.log("  exports:");
-    for (const [key, val] of Object.entries(packed.exports ?? {})) {
-      const imp = typeof val === "string" ? val : val.import ?? val.default ?? JSON.stringify(val);
-      const bad = imp && imp.endsWith(".ts");
-      console.log(`    ${key}: ${imp}${bad ? "  ← ✗ STILL .TS" : "  ✓"}`);
-      if (bad) failed = true;
+    if (packed.exports) {
+      console.log("  exports:");
+      for (const [key, val] of Object.entries(packed.exports)) {
+        const imp = typeof val === "string" ? val : val.import ?? val.default ?? JSON.stringify(val);
+        const bad = imp && imp.endsWith(".ts");
+        console.log(`    ${key}: ${imp}${bad ? "  ← ✗ STILL .TS" : "  ✓"}`);
+        if (bad) failed = true;
+      }
+    }
+
+    // mdbook ships a CLI rather than exports, so its entry point is the bin.
+    if (packed.bin) {
+      console.log("  bin:");
+      for (const [key, val] of Object.entries(packed.bin)) {
+        const bad = val.endsWith(".ts");
+        console.log(`    ${key}: ${val}${bad ? "  ← ✗ STILL .TS" : "  ✓"}`);
+        if (bad) failed = true;
+      }
     }
 
     rmSync(tgzPath);
@@ -98,8 +111,8 @@ for (const dir of PACK_ORDER) {
 rmSync(tmpDir, { recursive: true, force: true });
 
 if (failed) {
-  console.error("\n✗ Some exports still point to .ts source files!\n");
+  console.error("\n✗ Some exports or bins still point to .ts source files!\n");
   process.exit(1);
 } else {
-  console.log("\n✓ All packed exports resolve to .js dist files.\n");
+  console.log("\n✓ All packed exports and bins resolve to .js dist files.\n");
 }
