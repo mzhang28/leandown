@@ -1,0 +1,6 @@
+name = "example_lib"
+version = "0.1.0"
+defaultTargets = ["ExampleLib"]
+
+[[lean_lib]]
+name = "ExampleLib"

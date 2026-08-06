@@ -4,7 +4,11 @@ authors = ["Michael Zhang"]
 language = "en"
 
 [preprocessor.leandown]
-command = "bun run ../../packages/mdbook"
+command = "bun ../../packages/mdbook/main.ts"
+# Check the book's Lean code blocks inside this Lean 4 project (path relative to
+# this file) instead of an empty scratch project, so blocks can import the
+# libraries it builds. Run `lake build` in it before building the book.
+lean-project-path = "lean"
 
 [output.html]
 additional-js=["leandown.js"]
