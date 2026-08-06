@@ -1,5 +1,14 @@
 # @leandown/blueprint
 
+## 0.0.19
+
+### Patch Changes
+
+- febec4c: some updates
+- Updated dependencies [febec4c]
+  - @leandown/core@0.0.19
+  - @leandown/remark@0.0.19
+
 ## 0.0.15
 
 ### Patch Changes
