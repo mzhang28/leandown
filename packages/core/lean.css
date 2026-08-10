@@ -15,9 +15,10 @@
   --lean-type: #0184bc;
   --lean-string: #50a14f;
   --lean-number: #986801;
-  --lean-comment: #a0a1a7;
+  --lean-comment: #2e7d32;
   --lean-operator: #0184bc;
   --lean-sorry: #e45649;
+  --lean-muted: #a0a1a7;
 
   --lean-hover-bg: rgba(64, 120, 242, 0.15);
   --lean-hover-shadow: rgba(64, 120, 242, 0.3);
@@ -53,9 +54,10 @@
   --lean-type: #56b6c2;
   --lean-string: #98c379;
   --lean-number: #d19a66;
-  --lean-comment: #7f848e;
+  --lean-comment: #7fa86b;
   --lean-operator: #56b6c2;
   --lean-sorry: #ff6b6b;
+  --lean-muted: #7f848e;
 
   --lean-hover-bg: rgba(97, 175, 239, 0.25);
   --lean-hover-shadow: rgba(97, 175, 239, 0.5);
@@ -92,9 +94,10 @@
     --lean-type: #56b6c2;
     --lean-string: #98c379;
     --lean-number: #d19a66;
-    --lean-comment: #7f848e;
+    --lean-comment: #7fa86b;
     --lean-operator: #56b6c2;
     --lean-sorry: #ff6b6b;
+    --lean-muted: #7f848e;
 
     --lean-hover-bg: rgba(97, 175, 239, 0.25);
     --lean-hover-shadow: rgba(97, 175, 239, 0.5);
@@ -519,7 +522,7 @@ pre code.language-lean {
 .lean-loading-message {
   margin: 0;
   font-size: 0.95rem;
-  color: var(--lean-comment);
+  color: var(--lean-muted);
 }
 
 @keyframes lean-loading-spin {
