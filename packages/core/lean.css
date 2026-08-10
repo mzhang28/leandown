@@ -34,6 +34,7 @@
 
   --lean-goal-marker: #0184bc;
   --lean-goal-marker-hover: #4078f2;
+  --lean-output: #6b6f76;
 
   --lean-squiggly-error: #e45649;
   --lean-squiggly-warning: #c18401;
@@ -73,6 +74,7 @@
 
   --lean-goal-marker: #56b6c2;
   --lean-goal-marker-hover: #61afef;
+  --lean-output: #9199a5;
 
   --lean-squiggly-error: #e06c75;
   --lean-squiggly-warning: #e5c07b;
@@ -113,6 +115,7 @@
 
     --lean-goal-marker: #56b6c2;
     --lean-goal-marker-hover: #61afef;
+    --lean-output: #9199a5;
 
     --lean-squiggly-error: #e06c75;
     --lean-squiggly-warning: #e5c07b;
@@ -403,7 +406,7 @@ pre code.language-lean {
 /* Inline diagnostics (e.g. #eval and #check output) */
 .lean-diagnostic-inline {
   display: block;
-  color: var(--lean-goal-marker);
+  color: var(--lean-output);
   margin-left: 20px;
 }
 
@@ -414,7 +417,7 @@ pre code.language-lean {
 
 .lean-diagnostic-summary {
   display: inline;
-  color: var(--lean-goal-marker);
+  color: var(--lean-output);
   cursor: pointer;
   outline: none;
 }
@@ -445,7 +448,7 @@ pre code.language-lean {
 
 .lean-diagnostic-expanded {
   display: block;
-  color: var(--lean-goal-marker);
+  color: var(--lean-output);
   margin-left: 0px;
   opacity: 0.95;
   white-space: pre;
