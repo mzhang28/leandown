@@ -1,642 +1,624 @@
 # Code Audit Report: leandown
 
-A code quality and correctness audit of the `leandown` monorepo, covering
-`@leandown/core`, `@leandown/blueprint`, `@leandown/comark`, `@leandown/remark`,
-`@leandown/markdown-it`, `@leandown/mdbook`, and the VS Code extension.
+**Date:** 2026-10-10 · **Commit audited:** `3e3e0f9` (v0.0.20)
 
-Findings were verified by reading the source directly; representative lines are
-quoted. File references are repo-relative and clickable
-(e.g. `packages/core/src/client.ts:626`).
+This is a fresh, independent audit of the whole monorepo. It covers correctness,
+robustness and performance in `@leandown/core`, `@leandown/blueprint`, the
+remark, markdown-it and comark adapters, `@leandown/mdbook`, the VS Code
+extension, and build, release and packaging. It replaces the 2026-07-25 report,
+which is still in git history.
 
----
+How findings were checked: every finding was traced to code, with `file:line`
+references that are repo-relative. Findings marked **(verified)** were also
+reproduced by running the code. That was done in scratch copies, or with a real
+Lean toolchain and packed tarballs for the adapter and packaging checks.
+Speculative issues and style nits were dropped.
 
-## Executive Summary
-
-The most consequential issues cluster around **process/LSP lifecycle management**
-and **untrusted input handling**:
-
-- **LSP requests can hang forever.** `sendRequest` has no timeout and no reject
-  path; if `lake serve` dies or never answers, `highlight()` and the whole build
-  hang indefinitely (core #1).
-- **`lake serve` processes are orphaned on exit.** The exit/signal handlers call
-  an async `shutdown()` that awaits a request which never resolves, so
-  `proc.kill()` never runs and the temp project is deleted out from under a live
-  server (core #2).
-- **Path traversal in the dev-server docs middleware.** A request like
-  `/docs/../../../../etc/passwd` streams arbitrary local files, with no
-  containment check (blueprint #3).
-- **Background docs can crash the dev server.** `docsCommand({background:true})`
-  runs in-process and calls `process.exit(1)` on config errors, tearing down the
-  entire Vite dev server; its `spawn("lake")` also has no `.on("error")` handler,
-  so a missing `lake` throws an uncaught exception (blueprint #1, #2).
-- **The Comark adapter produces corrupted output.** Rewriting a node's tag to the
-  string `"html"` is not a raw-HTML passthrough in Comark; the highlighted HTML
-  ends up escaped or re-fenced (comark #1).
-- **Invalid Typst output.** `TypstBackend` emits nested `#raw(...)` calls that
-  don't compile (core #14).
-
-> **Correction to a prior audit:** an earlier version of this document flagged
-> Comark's `visitNodes` `slice(2)` as an off-by-one "brittle AST visitor" bug.
-> That finding is **incorrect** and has been removed: a `ComarkElement` always
-> carries a mandatory attributes object at index 1, so children genuinely start
-> at index 2. The real Comark defect is the output transform (comark #1 below).
-
-A later pass also surfaced a class of issues the original audit didn't cover —
-**release/packaging robustness** — now captured under
-[Build, release & packaging](#build-release--packaging).
+Severity: **High** means a crash, a hang, a security issue or broken output on
+common input. **Medium** means wrong results or large slowdowns in realistic
+setups. **Low** means an edge case or a hardening item.
 
 ---
 
-## Resolution status
+## Executive summary
 
-**Updated 2026-07-25.** The following findings have since been fixed:
+The most important problems, in order:
 
-- **Core #1, #4, #9, #12** — `sendRequest` now has a per-request timeout and a
-  reject path; the `error`/`exit` handlers reject all pending requests;
-  `highlight()` is wrapped in `try/finally` so `didClose` always fires and the
-  per-URI `diagnosticsMap`/`compileWaiters` entries are always cleared; the
-  compile-wait fallback timer and map entry are torn down once settled; and
-  `stdin` writes are guarded so a dead process rejects cleanly. (`28ea638`)
-- **Core #2, #3** — exit/signal handlers now kill LSP children synchronously via
-  `killSync()` (no orphaned `lake serve`, no early temp-dir delete); `leanHydrate`
-  disposes the prior run's global listeners and open tooltips before
-  re-hydrating. (`28ea638`)
-- **Blueprint #2** — the background docs `spawn` has an `error` handler that
-  closes the log fd and prints an actionable message. (`28ea638`)
-- **Blueprint #3** — the dev-server docs middleware now `decodeURIComponent`s,
-  rejects NUL/malformed input with `400`, and enforces a `docsRoot` containment
-  boundary before streaming.
-- **mdbook #1** — `processor.shutdown()` runs in a `finally`. (`28ea638`)
-- **All [Build, release & packaging](#build-release--packaging) findings.**
-  (`3015bed`)
-
-Still open: Core #5–#8, #10, #11, #13, #14; Blueprint #1, #4–#11; Comark #1;
-remark/markdown-it #1–#2; mdbook #2–#3; all VS Code items. `@libsql/client`
-(build/install #6-adjacent) is intentionally deferred — unusual platforms
-without a prebuilt binary are unsupported for now.
+1. **XSS / page breakage through the hover registry** (X1). Raw Lean source is
+   placed inside `<script type="application/json">` without escaping `</`.
+   Every adapter is affected. **(verified)**
+2. **A dead LSP is never restarted** (X2). After `lake serve` crashes, every
+   later block waits out timeouts and then throws. mdbook exits 0 with empty
+   output and hides the cause. **(verified)**
+3. **One processor's state is shared by concurrent documents** (X3). Astro and
+   Vite render pages in parallel, so one page's Lean code leaks into another,
+   with wrong `#eval` output and spurious "already declared" errors.
+   **(verified)**
+4. **O(N²) re-elaboration** (X4). Each block reopens a fresh document holding
+   all earlier blocks: 20 blocks took 8.7 s against 0.67 s as one block.
+   **(verified)**
+5. **The comark adapter emits escaped HTML** (A1). Lean output appears as
+   literal text. **(verified)**
+6. **The `TypstBackend` output never compiles** (C1). Nested `#raw("#raw(...)")`.
+   **(verified)**
+7. **The blueprint directive parser corrupts content** (B1, B2). `` $` `` /
+   `$$` in a body triggers `String.replace` substitution, and the scaffolded
+   `index.md` hits this. Nested, unclosed and fenced directives are mangled.
+   **(verified)**
+8. **Release CI is broken** (P1). `bun.lock` is stale after the 0.0.20 bump,
+   so `bun install --frozen-lockfile` fails. **(verified)**
+9. **`blueprint build` exits 1 on a fresh `init` project** (B3), because
+   `docsCommand` calls `process.exit` inside a `try`.
+10. **The VS Code extension uses a predictable `/tmp` project** (V3). Another
+    local user can plant a `lakefile.lean` that runs as you.
 
 ---
 
-## `@leandown/core`
+## Cross-cutting issues in `@leandown/core`
 
-### 1. `sendRequest` has no timeout or reject path — LSP failures hang forever `[High]`
-`packages/core/src/client.ts:626-637`
+These affect every consumer: remark, markdown-it, comark, mdbook and blueprint.
 
+### X1. Hover registry breaks out of its `<script>` tag (XSS) `[High]` (verified)
+`packages/core/src/client.ts:653`, `:396`; `packages/core/src/runtime.ts:247`
 ```ts
-private sendRequest(method: string, params: any): Promise<any> {
-  const id = this.nextRequestId++;
-  return new Promise((res) => {
-    this.pendingRequests.set(id, res);
-    ...
-    this.proc!.stdin!.write(message);
-  });
-}
+`<script type="application/json" class="lean-hover-data">${JSON.stringify(registry)}</script>`
+const word = (lines[l] || "").substring(sChar, eChar);
 ```
+The `registry.words` keys are raw source substrings, and `JSON.stringify` does
+not escape `<`. The input `def s : String := "</script><img src=x onerror=alert(1)>"`
+closes the script early, and the `<img onerror>` then runs. When no
+`compileMarkdown` is supplied (the comark default is the identity function),
+the `hovers` values are raw markdown or diagnostic text. `runtime.ts:247` then
+assigns them to `innerHTML`.
+**Fix:** `JSON.stringify(registry).replace(/</g, "\\u003c")`, and also escape
+U+2028 and U+2029. When `compileMarkdown` is absent, escape the hover text with
+the backend's `escape` before storing it.
 
-The promise only ever resolves from `parseMessages`; there is no `reject` and no
-timeout. `semanticTokens/full` (`client.ts:172`) and `$/lean/plainGoal`
-(`client.ts:387`) are awaited with **no** `.catch`, so a single missing response
-makes `highlight()` — and therefore `processBlock` and the whole build — hang
-forever. The `proc.on("error")` handler (`client.ts:59`) only logs; it never
-rejects pending requests, and `pendingRequests` entries leak.
-**Fix:** add a per-request timeout and reject all pending requests in the
-`error`/`exit` handlers.
+### X2. A dead or killed LSP is never detected or respawned `[High]` (verified)
+`packages/core/src/client.ts:59-62`, `:84-88`, `:146`, `:676-700`, `:744`
+- The `exit` handler only calls `failAllPending`. `proc` and `initPromise` stay
+  set, and `compileWaiters` are never resolved.
+- There is no `stdin.on("error")`. A write after the server has died can emit
+  an unhandled EPIPE, which crashes the host.
+- After `killSync()` or `shutdown()` sets `proc = null`, `start()` returns the
+  stale `initPromise` and `this.proc!.stdin` throws a `TypeError`.
+- A spawn failure leaves `initPromise` rejected forever, so every later
+  document fails, including ones that are fully cached (see X6).
+- `shutdown()` sends a request to a dead process. The request timer is
+  `unref`'d, so Node exits **0** before the caller's `catch` runs. mdbook then
+  reports only "EOF while parsing" (verified on mdbook 0.5.3).
 
-### 2. Exit/signal handlers don't await async `shutdown()` — orphaned `lake serve`, early temp-dir delete `[High]`
-`packages/core/src/processor.ts:77-96`, `client.ts:613-624`
+**Fix:**
+- On `exit` or `error`, null `proc` and `initPromise` and resolve all waiters.
+- Add a `stdin` error listener.
+- Respawn the server in `start()` when `proc` is null.
+- Skip the `shutdown` request when the process is dead.
 
+### X3. Per-document state is shared by concurrent documents `[High]` (verified)
+`packages/core/src/processor.ts:111`, `:142`, `:163`, `:172-174`; adapters `remark/src/index.ts:29,36`, `markdown-it/src/index.ts:34,45`, `comark/src/index.ts:36,45`
+Each adapter creates one `LeanHighlightProcessor` per plugin instance, with a
+mutable `cumulativeContent`. Two documents processed in parallel overwrite each
+other's prefix. Verified with `Promise.all([process(A), process(B)])`: doc B's
+`#eval foo` printed doc A's value, and B gained two "already declared" errors.
+The wrong output is then **cached**.
+**Fix:** keep the state per document, e.g. `processor.document()` returns a
+session object, or pass the prefix explicitly.
+
+### X4. Every block re-elaborates all earlier blocks `[Medium, perf]` (verified)
+`packages/core/src/processor.ts:142,151-153,163`; `client.ts:169-186`
+Block *k* is opened as a fresh `__temp_….lean` holding blocks 1…*k*. It waits
+for compilation (up to `COMPILE_TIMEOUT_MS = 30_000`, `client.ts:27`) and then
+closes. The cost is O(N²) elaboration, with fresh imports for every block
+(Mathlib reloads each time). Any `#eval` with IO side effects reruns N times.
+Measured: 20 theorems took **666 ms as one block and 8737 ms as 20 blocks**.
+Blocks that hit the 30 s timeout come back partial and are not cached, so they
+rerun on every rebuild.
+**Fix:** elaborate the whole document once, either as one file or with
+incremental `didChange` appends, and slice tokens, hovers and diagnostics by
+line range.
+
+### X5. Partial or failed LSP results are cached as final `[Medium]`
+`packages/core/src/client.ts:216`, `:239`, `:248`; `processor.ts:158-159`
+Hover and definition requests use `.catch(() => null)`, and `tokensRes.error`
+is ignored. When requests time out or fail (e.g. ContentModified), the block
+renders without hovers or highlighting, and that HTML is cached under a key
+that stays the same until the source changes.
+**Fix:** count failures and error responses, and skip the cache write if any
+occurred.
+
+### X6. Cache key and fingerprint are incomplete or wrong `[Medium]`
+`packages/core/src/cache.ts:24`, `:57-83`; `processor.ts:119-124`, `:133-148`
+- **Path dependencies hashed in the wrong place:** `cache.ts:75`
+  `hashLeanDirectory(path.resolve(pkg.dir))` resolves against `process.cwd()`
+  instead of the project path, so edits to path dependencies are never hashed.
+  Fix: `path.resolve(projectPath, pkg.dir)`.
+- **Inputs missing from the fingerprint:** `lean-toolchain` and
+  `lakefile.toml`. After a toolchain bump, cached permalinks still say
+  `blob/v4.34.1/…`.
+- **`compileMarkdown` not in the key:** remark, markdown-it and comark all
+  write `backend: "html"` into the same default cache directory, so they read
+  each other's tooltip HTML.
+- **Fingerprint memoised forever:** it is computed once per processor. In a
+  dev server, editing project `.lean` files never invalidates cached blocks.
+- **Cache hits still start Lean:** `client.start()` (`processor.ts:133-135`)
+  runs before the cache lookup. A fully cached build still spawns `lake serve`,
+  and it fails outright if `lake` is missing.
+- **VS Code companions hashed:** `collectLeanFiles` skips only
+  `.lake`/`.git`/`node_modules`, so the VS Code extension's `.leandown/*.lean`
+  companions are hashed. Every save in VS Code invalidates the whole cache.
+- **Cache grows without bound:** `cache.ts:144` uses `INSERT OR REPLACE` and
+  never evicts rows.
+
+**Fix:**
+- Resolve `dir` against the project path.
+- Add the toolchain, the lakefile and an adapter or compiler id to the key.
+- Recheck the fingerprint for each document.
+- Look up the cache before `start()`.
+- Skip dot-directories when collecting files.
+
+### X7. Unbounded request fan-out and quadratic hot loops `[Medium, perf]`
+`packages/core/src/client.ts:229-253`, `:362`, `:418`, `:587`, `:65`; `lib.ts:260`
+- **Fan-out:** one hover request plus one definition request per query token,
+  all sent at once with `Promise.all`. Every non-ASCII character is its own
+  token, so a 1,000-line block sends about 10–20k concurrent requests, which
+  feeds X5.
+- **Quadratic loops:** `tokens.find` inside the loop over unique tokens,
+  `tokens.some` per comment, and `tokens.filter` per line. Each is O(n·T).
+- **Buffering:** `Buffer.concat` on every stdout chunk is quadratic for
+  multi-MB responses.
+
+**Fix:** a concurrency pool of about 32 requests, a `Map` keyed by
+`line:start:len`, tokens bucketed by line once, and a chunk list for stdout.
+
+### X8. Synchronous `git` subprocesses for every external definition `[Medium, perf]`
+`packages/core/src/client.ts:293`, `:857-893`
+`getPermalinkForUri` runs before deduplication and spawns up to four
+`execSync` git commands for every URI outside the stdlib. A block referencing
+Mathlib hundreds of times makes more than 1,000 blocking spawns, which stalls
+the event loop and the dev server.
+**Fix:** memoise `{gitRoot, remote, HEAD}` for each package root, and compute
+permalinks after deduplication.
+
+### X9. One failed request fails the whole document `[Medium]`
+`packages/core/src/client.ts:209`, `:441`; adapters have no per-block `try`
+`$/lean/plainGoal` and `semanticTokens/full` have no `.catch`, unlike hover and
+definition. One timeout on a goal query rejects `highlight()`. No adapter
+(remark, markdown-it, comark, mdbook) catches errors per block, so the whole
+page or book fails. The goal loop (`:432-444`) also costs one sequential round
+trip per non-blank line. After a throw, the block is never appended to
+`cumulativeContent` (`processor.ts:163`), so later blocks lose its definitions.
+**Fix:**
+- Catch errors and treat them as "no goal".
+- Batch goal requests.
+- In each adapter, fall back to an escaped `<pre><code class="language-lean">` with a warning.
+- Append the block to `cumulativeContent` even when highlighting fails.
+
+### X10. Library takes over the host's SIGINT/SIGTERM `[Low]`
+`packages/core/src/processor.ts:98-100`
+`process.on("SIGINT", () => { cleanupClients(); process.exit(0); })` runs when
+the module is imported. In Vite, Astro or mdbook, Ctrl-C exits with code 0
+instead of 130 and cuts short the host's own graceful shutdown.
+**Fix:** use the `exit` hook with a synchronous kill only, or re-raise the
+signal after cleanup.
+
+### X11. Lifecycle and protocol robustness `[Medium/Low]`
+- **stderr never drained** `[Medium]` (`client.ts:62`): stderr uses the default
+  pipe and is never read. Heavy lake or lean logging blocks the child after
+  about 64 KB, and every request then times out. Fix: `stdio: ["pipe","pipe","inherit"]`
+  or a listener that drains it.
+- **Concurrent `highlight()` on a fresh client** `[Medium]` (`client.ts:146-148`):
+  `proc` is set before `initialize` resolves, so a second caller skips the
+  await and sends `didOpen` before `initialized`. Fix: always `await this.start()`.
+- **Server requests taken for responses** `[Low]` (`client.ts:774`): a
+  server-to-client request whose id collides with one of ours resolves our
+  pending request. Fix: treat a message as a response only when `method` is
+  absent, and answer unknown requests with `MethodNotFound`.
+- **No clean exit** `[Low]`: remark and comark expose no `shutdown()`, so
+  scripts never exit (verified: still running 45 s after "done").
+  markdown-it's `shutdown()` kills the pooled client that other processors
+  share (`processor.ts:179-187`). Fix: export a `dispose` and reference-count
+  pooled clients, or `unref()` the child process when idle.
+- **Blocking first call** `[Low]` (`processor.ts:51`): `execSync("lean --version")`
+  on the first block can block for about 100 s while elan downloads a
+  toolchain (observed).
+
+### C1. `TypstBackend` output never compiles `[High]` (verified)
+`packages/core/src/backend.ts:155-158`, `:195-205`; `client.ts:599`
+`escape()` returns `#raw("…")`, and `renderTokenStart` / `renderTokenEnd`
+already wrap the text in `#raw("` … `")`. The combined output is
+`#lean-token(type: "keyword")[#raw("#raw("def")")]`, a syntax error on every
+token. The `link: "${token.permalink}"` value is not escaped either. The tests
+check each method on its own and never the combined output.
+**Fix:** token start and end should emit only `#lean-token(...)[` and `]`, and
+`escape` should own the `#raw("…")`. Escape the permalink as well.
+
+### C2. Comment lexer mishandles char and raw-string literals `[Low]` (verified)
+`packages/core/src/lib.ts:226`, `:239-241`
+`'"'` starts a string, and `\` is treated as an escape everywhere.
+`def q := '"' -- quote` gets no comment token, and the string state stays
+inverted for the rest of the block. `r"C:\"` never closes.
+**Fix:** recognise `'…'` char literals and `r#*"…"#*` raw strings.
+
+---
+
+## Adapters
+
+### A1. Comark adapter emits escaped text inside a fake `<html>` element `[High]` (verified)
+`packages/comark/src/index.ts:64-65`
 ```ts
-function cleanupClients() {
-  ...
-  for (const client of clientPool.values()) {
-    client.shutdown();          // async, not awaited
-  }
-  if (tempProjectPath) { ... fs.rmSync(resolvedPath, {recursive:true, force:true}); }
-}
-process.on("exit", cleanupClients);
-process.on("SIGINT", () => { cleanupClients(); process.exit(0); });
+(node as unknown as unknown[])[0] = "html";
+(node as unknown as unknown[])[2] = html;
 ```
+Comark has no raw-HTML node, and its renderer escapes string children. The
+output is
+`<pre language="lean"><html class="language-lean">&lt;pre&gt;&lt;code …`, so
+Lean output shows as literal text and hydration is impossible.
+**Fix:** build comark element tuples from the HTML (e.g. with htmlparser2) and
+replace the whole `pre` node.
 
-`shutdown()` does `await this.sendRequest("shutdown", null)` **before**
-`this.proc.kill()`. On `exit`/SIGINT/SIGTERM the process terminates before that
-await resolves (finding #1 guarantees it may never resolve), so `proc.kill()`
-never runs. Because `spawn` is not `detached`, the heavyweight `lake serve`
-children are orphaned. Worse, `rmSync` deletes the temp project directory while
-`lake serve` may still be running against it.
-**Fix:** on exit/signals call `proc.kill()` directly/synchronously; reserve the
-graceful shutdown-request dance for the explicit async `shutdown()`.
+### A2. Comark streaming mode loses earlier blocks `[Low]`
+`packages/comark/src/index.ts:45-58`
+With `streaming: true`, `post` reruns on `[...reusableNodes, ...nodes]`, but
+the converted blocks no longer match `code`. They never enter
+`cumulativeContent`, so later blocks report "unknown identifier".
 
-### 3. Browser hydration leaks global listeners on every navigation `[Medium-High]`
-`packages/core/src/runtime.ts:98, 282-373` (invoked at `runtime.ts:85`)
-
-`leanHydrate` unconditionally does
-`document.addEventListener("mouseover"|"mouseout"|"click", ...)` with fresh
-anonymous closures and never removes them. `leanAwaitContent` calls
-`leanHydrate()` after every content swap (`runtime.ts:85`) — designed to run
-repeatedly for pager/SPA navigation. Each navigation stacks another full set of
-global listeners over stale `activeTooltips` state, producing duplicated tooltips
-and a growing memory leak.
-**Fix:** guard against double-init or return a teardown that removes listeners
-before re-hydrating.
-
-### 4. `highlight()` has no try/finally — `didClose` and map cleanup skipped on error `[Medium]`
-`packages/core/src/client.ts:152-582`
-
-`textDocument/didClose` is sent only on the success path (`client.ts:580`);
-`diagnosticsMap.delete` (`client.ts:428`) and `compileWaiters` cleanup are
-likewise unguarded. Any rejection between `didOpen` (`client.ts:152`) and
-`didClose` leaves the document open in the LSP server and leaks
-`diagnosticsMap`/`compileWaiters` entries. Over a long-running dev server this
-accumulates LSP-side document state.
-**Fix:** wrap the body in try/finally; always `didClose` and clear per-URI map
-entries.
-
-### 5. Lake dependency `dir` resolved against `cwd`, not the project path → stale cache `[Medium]`
-`packages/core/src/cache.ts:75`
-
-```ts
-parts.push(`${pkg.name ?? ""}:${hashLeanDirectory(path.resolve(pkg.dir))}`);
-```
-
-`pkg.dir` from `lake-manifest.json` is relative to the project root, but
-`path.resolve(pkg.dir)` resolves against `process.cwd()`. When cwd ≠ projectPath
-the path is wrong, `collectLeanFiles` returns `[]`, and `hashLeanDirectory`
-silently hashes empty content — so `computeProjectFingerprint` stays stable even
-after a path-dependency's source changes, serving stale cached highlights.
-**Fix:** `path.resolve(projectPath, pkg.dir)`.
-
-### 6. `getPermalinkForUri` runs 4 synchronous `git` subprocesses per token, uncached `[Medium]`
-`packages/core/src/client.ts:715-808` (called per token at `client.ts:256`)
-
-For every external-definition token this synchronously shells out to
-`git rev-parse --is-inside-work-tree`, `--show-toplevel`,
-`git config --get remote.origin.url`, and `git rev-parse HEAD`. There is no
-memoization by directory, so a block referencing many stdlib/dep symbols triggers
-dozens–hundreds of blocking git invocations, serializing the event loop.
-**Fix:** cache results per repo-dir (and commit).
-
-### 7. `computeProjectFingerprint` reads the entire project source into one string `[Medium]`
-`packages/core/src/cache.ts:43-54`
-
-```ts
-const content = fs.readFileSync(file, "utf8");
-parts.push(`${rel}\0${content}`);
-...
-return hashContent(parts.join("\n"));
-```
-
-Every `.lean` file's full contents are concatenated into a single string before
-hashing. For a Mathlib-scale dependency tree this reads hundreds of MB into
-memory on the first `processBlock`.
-**Fix:** feed a streaming hash (`crypto.createHash`) file-by-file; consider
-mtime/size for large trees.
-
-### 8. `fileId` can be very short or empty — temp-URI collisions `[Low]`
-`packages/core/src/client.ts:141`
-
-```ts
-const fileId = Math.random().toString(36).substring(7);
-```
-
-`Math.random().toString(36)` isn't guaranteed to be ≥7 chars (e.g. `0.i`), so
-`substring(7)` can return an empty string. Concurrent `highlight` calls could
-then collide on `tempFileUri`, cross-contaminating `compileWaiters`/`diagnosticsMap`.
-**Fix:** use `crypto.randomUUID()` or a monotonic counter.
-
-### 9. `compileWaiters` entry + timer leak on compile timeout `[Low]`
-`packages/core/src/client.ts:161-170`
-
-When the `COMPILE_TIMEOUT_MS` branch of `Promise.race` wins, the entry set via
-`compileWaiters.set(tempFileUri, …)` is never removed (only `fileProgress`
-deletes it, `client.ts:683`). Conversely, when the compile-wait resolves first,
-the `setTimeout` timer is never cleared, keeping the event loop alive.
-**Fix:** delete the waiter and `clearTimeout` after the race settles.
-
-### 10. `getGoalQueryPositions` strips comments with naive `split("--")` `[Low]`
-`packages/core/src/lib.ts:229`
-
-```ts
-const cleanText = lineText.split("--")[0]!.trimEnd();
-```
-
-`--` inside a string literal or as part of an operator token is misread as a
-comment start, truncating the line and producing wrong goal-query positions.
-
-### 11. `parseMessages` silently drops server→client requests carrying an `id` `[Low]`
-`packages/core/src/client.ts:675`
-
-Server-initiated requests (`window/workDoneProgress/create`,
-`client/registerCapability`, …) have an `id` but aren't in `pendingRequests`, so
-they're dropped with no response. Benign today, but could stall if Lean ever
-requires a reply.
-
-### 12. `stdin` writes can throw after the process exits `[Low]`
-`packages/core/src/client.ts:635, 645`
-
-`this.proc!.stdin!.write(message)` throws synchronously if the child has exited.
-Combined with #1's missing error handling this surfaces as an uncaught exception
-rather than a clean rejection.
-
-### 13. Dead / duplicated code `[Low]`
-- `wrapLeanCodeBlock` (`packages/core/src/html.ts:7-9`) duplicates
-  `HtmlBackend.wrapBlock` (`backend.ts:58-60`) verbatim and is effectively dead
-  (the processor uses `backend.wrapBlock`).
-- `getDatabase` and `ensureDatabaseInitialized` (`cache.ts:88-126`) duplicate the
-  cacheDir/dbPath resolution logic; a divergence would silently split caches.
-
-### 14. `TypstBackend` emits invalid nested `#raw(...)` `[High]`
-`packages/core/src/backend.ts:140-192`, rendered at `client.ts:544-575`
-
-Within a token span the renderer emits, in order: `renderTokenStart` →
-`#lean-token(type:"keyword")[#raw("`, then the span text via `escape()`
-(`client.ts:546`) → `#raw("def")`, then `renderTokenEnd` → `")]`. Concatenated,
-that is:
-
-```typst
-#lean-token(type: "keyword")[#raw("#raw("def")")]
-```
-
-The nested `#raw` is invalid Typst; it fails to compile or renders literal
-`#raw("def")` text.
-**Fix:** `escape()` should return plain escaped text (no `#raw(...)` wrapper) when
-called between token boundaries, since the boundaries already open a `#raw("` /
-close `")`.
+### A3. markdown-it and remark disagree on which fences are Lean `[Low]`
+`packages/markdown-it/src/index.ts:49` (`info.trim() === "lean"`) vs
+`packages/remark/src/index.ts:40` (`node.lang === "lean"`). A fence like
+```` ```lean title=x ```` is highlighted by remark but not by markdown-it.
+**Fix:** compare against `info.trim().split(/\s+/)[0]`.
 
 ---
 
 ## `@leandown/blueprint`
 
-### 1. Background `docsCommand` can kill the dev server via `process.exit` `[High]`
-`packages/blueprint/src/commands/serve.ts:43-44`, `commands/docs.ts:33,38,45`
-
-`serve` fires `docsCommand({ background: true }).catch(() => {})`, but
-`docsCommand` runs **in the same process** and calls `process.exit(1)` on config
-errors (`docs.ts:33`, `:38`, `:45` — e.g. missing `leanProjectPath` directory).
-`process.exit` is not a rejection, so `.catch()` can't save it: a misconfigured
-lean dir tears down the entire Vite dev server.
-**Fix:** in background mode, log/return errors instead of `process.exit`; or have
-`serve` validate the lean dir itself.
-
-### 2. Background `spawn("lake", …)` has no `.on("error")` — uncaught exception + fd leak `[High]`
-`packages/blueprint/src/commands/docs.ts:55-71`
-
-```ts
-const out = fs.openSync(logPath, "w");
-const child = spawn("lake", ["build", ":docs"], { cwd: leanDir, stdio: ["ignore", out, out] });
-child.on("close", (code) => { fs.closeSync(out); ... });
-```
-
-There is no `child.on("error", …)` (confirmed absent across `src/`). If `lake` is
-`ENOENT`, Node emits an unhandled `'error'` event and throws — crashing the dev
-server asynchronously after startup. The `out` file descriptor also leaks on that
-path.
-**Fix:** add `child.on("error", …)` that closes `out` and logs the failure.
-
-### 3. Path traversal in the dev-server docs middleware `[High]`
-`packages/blueprint/src/vite/blueprint-plugin.ts:196-211`
-
-```ts
-const reqPath = (req.url ?? "/").split("?")[0]!;
-const candidates = [ path.join(docsDir, reqPath), ... ];
-... if (fs.statSync(filePath).isFile()) { ...; fs.createReadStream(filePath).pipe(res as any); }
-```
-
-`reqPath` comes straight from the request URL with no containment check and no
-`decodeURIComponent`. A request like `/docs/../../../../etc/passwd` yields a path
-that normalizes *out* of `docsDir`, and the file is streamed back — arbitrary
-local file read on the dev server.
-**Fix:** `const resolved = path.resolve(docsDir, "." + decodeURIComponent(reqPath))`,
-then reject unless `resolved.startsWith(docsDir + path.sep)`.
-
-### 4. `enrichWithLsp` is an expensive no-op (dead work) `[Medium]`
-`packages/blueprint/src/lean/analyzer.ts:160-179`
-
-Phase 2 of `analyzeProject` starts a full `LeanLSPClient`, reads and highlights
-up to 20 sources (`sources.slice(0, 20)`), then discards every result. The
-`declInfos` map passed in is never mutated, and `LeanDeclInfo.references` is only
-ever `[]`. With `useLsp` defaulting to `true` (`analyzer.ts:51`), every analysis
-pays the full cost of booting Lean's LSP for zero effect.
-**Fix:** wire the highlight results back into `declInfos`, or delete the LSP phase
-and the `useLsp` default.
-
-### 5. Graph edge direction/schema inconsistent across the two pipelines `[Medium]`
-`packages/blueprint/src/lean/analyzer.ts:257` vs `vite/blueprint-plugin.ts:57`
-
-Two independently-exported implementations produce **opposite** edge conventions
-and different keys:
-- `analyzer.ts:257`: `edges.push({ from: label, to: useLabel })` — node → dependency.
-- `blueprint-plugin.ts:57`: `edges.push({ source: dep, target: label })` — dependency → node.
-
-They also disagree on status schema (`DeclState` enum in `types.ts` vs booleans in
-`graph-renderer.ts`). Any consumer mixing `analyzeProject` output with the renderer
-gets reversed arrows and a schema mismatch.
-**Fix:** unify on one edge schema/direction (the renderer expects `{source,target}`).
-
-### 6. Same-line `@[blueprint "..."]` annotations are silently dropped `[Medium]`
-`packages/blueprint/src/lean/analyzer.ts:93-107`
-
-The label-collection loop only attaches annotations where `ann.line < i` (strictly
-before the decl line), but `DECL_RE` (`analyzer.ts:29`) explicitly allows same-line
-attributes (`(?:@\[[^\]]*\]\s*)*`). For `@[blueprint "foo"] def bar`, `ann.line == i`
-so the label is never attached. The test fixtures only place the attribute on the
-preceding line, so this is untested.
-**Fix:** also match annotations on the decl line itself.
-
-### 7. `$` sequences in directive bodies corrupt output `[Medium]`
+### B1. `String.replace` substitution corrupts directive bodies containing `$` `[High]` (verified)
 `packages/blueprint/src/plugin/index.ts:182`
+`result.replace(directive.fullMatch, html)` interprets `` $` ``, `$'`, `$&` and
+`$$` in `html`. Leandown's inline-math syntax `` $`…` `` is replaced with the
+text that comes before the match. The scaffolded `src/template/index.md:7,11,21`
+hits this on a fresh `blueprint init`.
+**Fix:** `result.replace(directive.fullMatch, () => html)`, or splice by index.
 
-```ts
-result = result.replace(directive.fullMatch, html);
-```
+### B2. Close detection is broken for nested, unclosed or fenced directives `[Medium]` (verified)
+`packages/blueprint/src/plugin/index.ts:61-66`; `vite/blueprint-plugin.ts:16,43`
+`/^:::/m` treats any line starting with `:::` as the close, including the
+next opener.
+- **Nested:** `:::theorem … :::proof … ::: :::` renders `</section>proof` and
+  leaves stray `:::` lines.
+- **Unclosed:** an unclosed directive swallows the next opener.
+- **Fenced:** directives inside fenced code are rewritten. The graph scanner
+  also creates fake nodes from code fences.
 
-The string second-argument to `String.prototype.replace` treats `$$`, `$&`, `` $` ``,
-`$'`, `$n` specially. Since `html` embeds the raw directive body (`index.ts:165`),
-display-math `$$…$$` collapses to `$…` and `$&`/`$'` get substituted.
-**Fix:** use a function replacement: `result.replace(directive.fullMatch, () => html)`.
+**Fix:** a line-based parser that skips fences, counts depth, requires an
+exact `:::` close and warns on unclosed directives.
 
-### 8. Nested directives mis-parsed (close matcher too greedy) `[Medium]`
-`packages/blueprint/src/plugin/index.ts:60-65`
+### B3. `blueprint build` / `serve` die whenever `lake build :docs` fails `[High]`
+`packages/blueprint/src/commands/build.ts:35-41`; `commands/docs.ts:24-46,103-107`; `commands/serve.ts:43-46`; `template/blueprint.json:3`
+`docsCommand` calls `process.exit(1)`, which neither `try/catch` nor
+`.catch()` can intercept. The template sets `leanProjectPath: "./lean"` but
+creates an empty `lean/`. So `init` → `install` → `build` exits 1 with no site,
+and so does any project without doc-gen4 or without `lake`. In `serve`, a
+missing lean directory kills the CLI before Vite starts.
+**Fix:** have `docsCommand` throw or return a status. `build` and `serve` should
+warn and continue.
 
-The closing tag is found via `closeRegex = /^:::/m`, which matches *any* line
-starting with `:::`, including a nested opener like `:::proof`. A
-`:::theorem … :::proof … ::: … :::` block terminates the theorem at the `:::proof`
-line, truncating its content.
-**Fix:** track nesting depth, or require a bare `:::` closer.
+### B4. Scaffolded deps pin `^0.0.1`, which on 0.0.x matches only 0.0.1 `[High]`
+`packages/blueprint/src/commands/init.ts:124-125`
+For a 0.0.x version, caret means `>=0.0.1 <0.0.2`, so new projects install
+0.0.1 instead of 0.0.20 (different template and API).
+**Fix:** write `^${pkg.version}` using the CLI's own package.json.
 
-### 9. Hash-route collisions from `path.basename` `[Medium]`
-`packages/blueprint/src/vite/summary.ts:30`
+### B5. Router has no `basepath`, so sub-path deploys break `[High]`
+`packages/blueprint/src/app/router.tsx:30`; `components/Sidebar.tsx:25,40`
+With `base: "/repo/"` (a GitHub Pages project site):
+- `/repo/ch1` matches no route.
+- `/repo/` shows the first page with slug `repo`.
+- Sidebar links leave the base path.
 
-```ts
-const route = path.basename(href, ".md");
-```
+**Fix:** `createRouter({ routeTree, basepath: import.meta.env.BASE_URL })`, and
+drop the manual `replace(BASE, "")`.
 
-`./algebra/intro.md` and `./topology/intro.md` both yield route `"intro"`. Since
-routes key `location.hash` and `routeMap` (`blueprint-plugin.ts:31`), the second
-overwrites the first and navigation/graph nodes point to the wrong page.
-**Fix:** derive the route from the full relative path.
+### B6. No HTML escaping of labels or attributes `[Medium]` (verified)
+`packages/blueprint/src/plugin/index.ts:96-157`
+`(owner := "x\" onclick=\"alert(1)")` produces a working attribute injection,
+because `\"` is accepted by the regex but never unescaped. Ordinary labels such
+as `"a<b"` or `"f & g"` produce broken markup.
+**Fix:** unescape `\\.` in `parseInfo`, and pass every interpolated value
+through `escapeHtml`.
 
-### 10. `srcDir` config option is ignored `[Medium]`
-`packages/blueprint/src/util.ts:12`, `vite/blueprint-plugin.ts:140`
+### B7. Graph is stale in dev, and duplicate labels crash it `[Medium]`
+`packages/blueprint/src/vite/blueprint-plugin.ts:51-54`, `:152-155`, `:291-295`
+- **Stale graph:** the graph module never calls `addWatchFile` and is never
+  invalidated, so new directives or `uses` don't show on `/graph` until the
+  server restarts.
+- **Duplicate labels:** a duplicate label creates a duplicate cytoscape id,
+  which throws "Can not create second element with ID".
 
-`BlueprintConfig.srcDir` is defined but the plugin hardcodes
-`const srcDir = path.join(resolvedRoot, "src")` and never reads `cfg.srcDir`.
-Projects that set it silently get `"src"`.
-**Fix:** read `cfg.srcDir` in `configResolved`.
+**Fix:** watch the scanned files or invalidate the module, and dedupe ids with
+a warning.
 
-### 11. Lower-severity blueprint items `[Low]`
-- **cola `flow.axis` contradicts its comment** (`graph-renderer.ts:287-288`):
-  comment says "downward flow" but sets `axis: "x"` (horizontal). Should be `"y"`.
-- **`not_ready` color defined but never applied** (`graph-renderer.ts:35`, legend
-  `:149`): `resolveStatementColor` (`:67-72`) never returns it; legend advertises a
-  state the renderer can't produce.
-- **`build`/`closeBundle` hardcode `dist`** (`build.ts:53`,
-  `blueprint-plugin.ts:225`), overriding a custom `build.outDir`.
-- **`detectSorry` ignores block comments/strings** (`analyzer.ts:147-156`): a
-  `sorry` inside `/- … -/` or a string yields a false `not_ready`.
-- **Double reload on `.md` HMR** (`blueprint-plugin.ts:257-261` +
-  `handleHotUpdate` `:267-272`): both fire on a markdown edit.
-- **`allAncestorsProved` treats cycles as proved** (`blueprint-plugin.ts:71-77`):
-  revisiting a node returns `true`, so an unproved dependency cycle reports
-  `fullyProved`.
-- **`parseLakefile` under-parses** (`lakefile.ts:51`): a `[[lean_lib]]` header with
-  a trailing comment fails the strict `^\[\[lean_(lib|exe)\]\]$` regex; `LakeLib`
-  also drops `root`.
+### B8. Graph statuses don't match the legend `[Medium]`
+`packages/blueprint/src/vite/blueprint-plugin.ts:47-49`, `:71-77`; `vite/graph-renderer.ts:67-80`, `:149-164`, `:287-288`
+- **Status not checked:** `stated` means "has a `lean` attribute" and `proved`
+  means "has a `proved` attribute". Neither is checked against Lean.
+- **Unreachable states:** the `can_state` branch is dead (proved implies
+  stated), and `not_ready` is never assigned, yet the legend shows both.
+- **`can_prove` ignores dependencies:** it is given to every stated-but-unproved
+  node.
+- **Cycles:** an unproved cycle reports `fullyProved` (`visited` returns
+  `true`).
+- **Layout direction:** cola `flow.axis: "x"` lays out left-to-right, while the
+  comment says "downward".
 
----
+**Fix:** compute states from dependency statuses the way leanblueprint does,
+detect cycles, and use `axis: "y"`.
 
-## `@leandown/comark`
+### B9. Lean analyzer is wrong, and costly when it runs `[Medium]`
+`packages/blueprint/src/lean/analyzer.ts:29`, `:93-106`, `:127-136`, `:160-179`, `:240-257`, `:323`, `:343-372`
+`analyzeProject` isn't called anywhere in the build. It has these defects:
+- **Same-line attribute attached to the wrong declaration:** a same-line
+  `@[blueprint "foo"] theorem a` attaches `foo` to the **next** declaration.
+- **Declaration forms not recognised:** `private`/`protected`/`partial`,
+  `abbrev`, `axiom` and `opaque` are not recognised.
+- **Names unqualified:** names are recorded without their `namespace`, so
+  `lean := "Ns.foo"` misses the lookup and counts as `sorry`.
+- **States unreachable:** the `hasOwnSorry` `continue` makes `can_state` and
+  `can_prove` unreachable.
+- **Edge direction:** edges go user→dependency, the opposite of the Vite graph.
+- **Wasted LSP run:** `enrichWithLsp` starts Lean and highlights up to 20 files
+  per run, then discards the results. `useLsp` defaults to `true`.
 
-### 1. Comark adapter produces corrupted output — `node[0]="html"` is not a passthrough `[High]`
-`packages/comark/src/index.ts:60-66`
+**Fix:** use `ann.line <= i` and start the blocking scan at `ann.line`. Track
+namespaces. Compute status from own-sorry plus dependency statuses. Unify the
+edge schema. Remove or disable the LSP phase.
 
-```ts
-(node as unknown as unknown[])[0] = "html";
-(node as unknown as unknown[])[2] = html;
-```
+### B10. Routing and page-loading edge cases `[Low]`
+- `vite/summary.ts:30`: `path.basename` route keys collide (`a/intro.md` and
+  `b/intro.md`). A page named `graph.md` is shadowed by `/graph`.
+- `app/components/MarkdownPage.tsx:24`: unknown slugs silently show the first
+  page.
+- `app/components/MarkdownPage.tsx:36-38`: no cancellation and no `.catch`, so
+  a late response overwrites the current page and a failed import leaves a
+  blank page.
 
-Detection is correct (the traversal recurses into the `pre` wrapper and finds the
-inner `code` node), but the **transform is wrong**. Comark has no raw-HTML
-passthrough tag — raw HTML is real element nodes carrying `$:{html:1}`. Setting the
-tag to the literal string `"html"`:
-- in HTML render mode, the highlighted-HTML **string child gets HTML-escaped**, so
-  users see literal `&lt;span…` text;
-- in markdown render mode, the surviving parent `pre` handler re-serializes the
-  child text back into a fenced code block, dumping the raw HTML as code.
-Either way the core feature output is corrupted, and the leftover
-`{class:'language-lean'}` attrs object stays at `node[1]`.
-**Fix:** replace the parent `pre` node with a node marked `$:{html:1}` (matching how
-remark uses `type:"html"` and markdown-it uses `html_block`).
+### B11. Config and output paths `[Low]`
+- `commands/build.ts:41`, `commands/serve.ts:46`, `vite/blueprint-plugin.ts:175`:
+  a `blueprint.json` parse error is silently ignored.
+- `util.ts:12` vs `vite/blueprint-plugin.ts:140`: `srcDir` is ignored, and
+  `"src"` is hard-coded.
+- `commands/build.ts:53`, `vite/blueprint-plugin.ts:249`: `dist` is
+  hard-coded, which overrides `build.outDir`.
+- `vite/blueprint-plugin.ts:245-252`: the whole doc-gen4 tree is copied
+  synchronously on every build and every watch rebuild.
+- `vite/blueprint-plugin.ts:217-221`: `/docs` without a trailing slash serves
+  `index.html`, so doc-gen4's relative assets 404. It should redirect to
+  `/docs/`.
+- `vite/blueprint-plugin.ts:257-261` plus `handleHotUpdate`: a markdown edit
+  triggers two reloads.
 
-> `visitNodes`'s `slice(2)` (`index.ts:71-79`) is **correct** — Comark elements
-> always carry a mandatory attributes object at index 1.
-
----
-
-## `@leandown/remark` & `@leandown/markdown-it`
-
-### 1. markdown-it: lean fences with any extra info string aren't highlighted `[Medium]`
-`packages/markdown-it/src/index.ts:49`
-
-```ts
-if (token.type === "fence" && token.info.trim() === "lean") {
-```
-
-Exact-match on the whole info string means ` ```lean title=x ` (info
-`"lean title=x"`) is skipped — inconsistent with the remark plugin, which matches
-`node.lang === "lean"` (first word only).
-**Fix:** compare the first token: `token.info.trim().split(/\s+/)[0] === "lean"`.
-
-### 2. Unused imports (dead code) `[Low]`
-- `packages/remark/src/index.ts:8`: `import type { LeanHighlightOptions }` — never referenced.
-- `packages/markdown-it/src/index.ts:3`: same unused import.
+### B12. `init` defects `[Low]`
+- `commands/init.ts:6`: `TEMPLATE_DIR` exists only under `dist/`. Run from
+  source, every template is skipped, yet "Created files" is still printed.
+- `commands/init.ts:35`: the directory name is substituted into JSON and HTML
+  with no escaping, and a string replacer expands `$&`.
 
 ---
 
 ## `@leandown/mdbook`
 
-### 1. LSP subprocess not shut down on the error path `[Medium]`
-`packages/mdbook/main.ts:63-78`
+### M1. Fence regex swallows prose and breaks neighbouring blocks `[High]` (verified)
+`packages/mdbook/main.ts:27`
+`` /```lean\r?\n([\s\S]*?)\r?\n```/g `` has no line anchors.
+- **Empty block:** an empty `` ```lean `` block captures the following prose
+  and corrupts the next fence.
+- **Lists and blockquotes:** a Lean fence inside a list or blockquote never
+  matches its indented close.
+- **Nested fences:** Lean examples inside a ` ````markdown ` fence get
+  rewritten.
+- **Info strings:** `lean4`, `lean,ignore` and `lean title` are ignored.
 
-`processor.shutdown()` (`:71`) is only reached on success. If any
-`processItem`/`processBlock` throws, control jumps to `catch` (`:75`) which
-`console.error` + `process.exit(1)` without calling `shutdown()`, leaving the
-pooled Lean LSP child dangling.
-**Fix:** `try/finally` with `await processor.shutdown()` in the `finally`.
+**Fix:** walk markdown-it `fence` tokens (markdown-it is already a dependency),
+using `token.map` and `token.info`.
 
-### 2. Inconsistent `resetDocument` scoping across sub-chapters `[Low]`
-`packages/mdbook/main.ts:65-68` vs `processItem` (`:7-17`)
+### M2. `{{#include}}` inside Lean blocks breaks `[Medium]` (verified)
+Preprocessors without ordering run alphabetically, so leandown runs before
+`links`. Lean sees `{{#include …}}` and errors. Then `links` injects raw text
+into the emitted `<pre>`.
+**Fix:** document `after = ["links"]` in the README and `examples/mdbook/book.toml`,
+or warn when a block contains `{{#`.
 
-`resetDocument()` runs once per top-level item, but `processItem` recurses into
-`chapter.sub_items` without resetting. Sub-chapter blocks accumulate onto their
-parent's cumulative Lean context while sibling top-level chapters are isolated —
-asymmetric and likely unintended.
+### M3. Errors exit 0 and blocks run serially `[Medium]`
+`packages/mdbook/main.ts:9-37`, `:86-101`
+- **Error hidden:** see X2. The `finally { await processor.shutdown() }` hangs
+  on a dead server and Node exits 0, so the real error is never printed.
+- **One block fails the book:** there's no per-block `catch` (X9).
+- **Serial processing:** chapters run one after another, even though they are
+  independent.
 
-### 3. Fence regex is unanchored / mishandles indented and empty blocks `[Low]`
-`packages/mdbook/main.ts:21`
+**Fix:** catch errors, print them and `process.exit(1)` after a bounded
+shutdown. Use a per-block fallback, and process chapters concurrently with a
+small limit.
 
-```ts
-/```lean\r?\n([\s\S]*?)\r?\n```/g
-```
+### M4. `supports` accepts every renderer `[Low]` (verified)
+`packages/mdbook/main.ts:47-49` always exits 0, so markdown, epub and
+linkcheck outputs get raw HTML and `<script>` blobs.
+**Fix:** `process.exit(process.argv[3] === "html" ? 0 : 1)`.
 
-Not anchored to line start, so it matches mid-line ` ```lean `; indented fences (in
-lists) over-consume to a later ` ``` `; empty lean blocks aren't matched.
+---
+
+## VS Code extension (`packages/vscode`)
+
+### V1. Every keystroke does a synchronous workspace scan and saves to disk `[High, perf]`
+`packages/vscode/src/extension.ts:40-45`, `:374`, `:388-407`, `:479`, `:505`, `:544-548`, `:604-607`
+`onDidChangeTextDocument` has no debounce. `getCompanionUris` runs **before**
+the "no Lean blocks" early return. It does a synchronous `readdirSync` walk,
+depth 5, over every workspace folder. The companion is then saved with
+`applyEdit` + `save()` on every change. In a large monorepo, typing in any
+README stalls the extension host, and save hooks fire on every keystroke.
+**Fix:** check for blocks first, debounce about 200 ms, cache the companion
+path in `DocState`, and drop the per-keystroke `save()`.
+
+### V2. Companion path is computed again on each sync but stored only once `[Medium]`
+`packages/vscode/src/extension.ts:544`, `:559-566`, `:575-604`
+`state.leanUri` is set when the state is created, while later syncs write to a
+freshly resolved path. A document open at startup resolves to the `/tmp`
+fallback before workspace folders exist, and later syncs then edit
+`<proj>/.leandown/…`. Hover, definition, tokens and diagnostics keep reading
+the stale companion.
+**Fix:** resolve the path once, or migrate the state when the path changes.
+
+### V3. Fixed, predictable `/tmp/leandown-temp-project` `[Medium, security]`
+`packages/vscode/src/extension.ts:432-462`
+The directory is reused if it exists, and the lakefile is written only if it
+is absent. Another local user can pre-create the directory with a malicious
+`lakefile.lean`, and `lake serve` then runs it as the victim. Two VS Code
+windows also share the directory and delete each other's companions.
+**Fix:** `fs.mkdtempSync` (as core does at `processor.ts:45`), or
+`context.globalStorageUri`.
+
+### V4. Semantic tokens are never refreshed `[Medium]`
+`packages/vscode/src/extension.ts:257-285`
+No `onDidChangeSemanticTokens` is registered. Tokens are requested before the
+companion has been updated or elaborated, and are never requested again. After
+inserting a line, every highlight is off by one line until the next keystroke.
+On first open the file stays uncoloured.
+**Fix:** use an `EventEmitter`, fired after the companion sync and when Lean
+finishes.
+
+### V5. Deleting the last Lean block deletes the companion `[Medium]`
+`packages/vscode/src/extension.ts:548-552`, `:712-715`
+Temporarily editing `` ```lean `` to `` ```lea `` unlinks the companion and
+discards the state. Retyping it re-elaborates from scratch and flashes the
+companion tab open again.
+**Fix:** keep the state and file until the Markdown document is closed, and
+write an empty companion.
+
+### V6. Smaller extension defects `[Low]`
+- **Companion name collisions** (`extension.ts:511,515,519`): `/a/b_c.md` and
+  `/a/b/c.md` map to the same flat name, and so do two repos' `README.md` under
+  an absolute `tempDir`. Fix: add a hash of `fsPath` to the name.
+- **Fence parsing is not CommonMark** (`markdown-parser.ts:37,63`) (verified):
+  - It opens on `startsWith("```lean")`, so `leanOutput` is compiled as Lean.
+  - It closes on any line starting with three backticks, so 4-backtick fences
+    and nested examples are mis-split.
+  - `> > ```lean` is not detected.
+- **Scheduled tab close** (`extension.ts:678-682`): 1 s after the client
+  starts, every tab for the companion is closed, including one the user just
+  opened.
+- **Missing dependency** (`vscode/package.json`): there is no
+  `extensionDependencies: ["leanprover.lean4"]`, so without that extension
+  every feature silently does nothing.
 
 ---
 
 ## Build, release & packaging
 
-These findings concern how the packages are built and published rather than
-runtime behaviour. All were found and **fixed** in the 2026-07-25 pass
-(`3015bed`); they're recorded here because they were shipping fragilities, not
-one-off mistakes.
+### P1. `bun.lock` is stale, so release and docs CI fail at install `[High]` (verified)
+The bump commit `3e3e0f9` set the versions to 0.0.20, but `bun.lock` still has
+0.0.19 entries and mdbook pins `@leandown/core: ^0.0.16`. `bun install --frozen-lockfile`
+(`.github/workflows/release.yml:38`, `deploy-docs.yml:46,62`) fails with
+"lockfile had changes, but lockfile is frozen".
+**Fix:** run `bun install` and commit the lockfile, and make the bump step
+update it.
 
-### 1. `publish-packages.mjs` continued past a failed publish and reported success `[High]` `Fixed`
-`scripts/publish-packages.mjs`
+### P2. `pack-local` fails and the blueprint e2e suite never runs `[Medium]` (verified)
+- **pack-local fails:** `scripts/pack-local.mjs:49` uses `pnpm pack` in a bun
+  workspace and fails with `ERR_PNPM_CANNOT_RESOLVE_WORKSPACE_PROTOCOL`.
+- **Stale e2e suite** (`tests/blueprint.spec.ts`):
+  - **Wrong version:** `:64` hard-codes `PACK_VERSION = "0.0.11"`.
+  - **Suite skipped:** `:183` is `test.describe.skip`.
+  - **Stale file paths:** it expects `src/main.ts`, while init writes
+    `main.tsx`.
+  - **Cache never persists:** its project directory is under `test-results/`,
+    which Playwright deletes on every run, so the "cache persists" comment is
+    false.
 
-Each package's `npm publish` was wrapped in a `try/catch` that only
-`console.warn`ed and continued, after which the script printed
-"✓ completed successfully" with exit code `0` regardless. Because the script
-rewrites internal `workspace:*` deps to `^{version}` before publishing, a failed
-`@leandown/core` publish would still push `@leandown/blueprint`/`@leandown/mdbook`
-pinned to a `core` version that never landed — a broken release npm can't roll
-back, reported to CI as green.
-**Fix:** abort on the first failed publish in real runs; dry runs still continue
-(an already-published version is expected there) so every package's packaging is
-validated.
+**Fix:** reuse the `npm pack` approach from `verify-publish.mjs` and read the
+version from package.json.
 
-### 2. `@leandown/markdown-it` and `@leandown/comark` were never published `[Medium]` `Fixed`
-`scripts/publish-packages.mjs`
+### P3. Stryker/Playwright port isolation never takes effect `[Medium]`
+`tests/playwright.config.ts:4`; `tests/blueprint.spec.ts:106`
+They read `STRYKER_SANDBOX_WORKER_INDEX`, but Stryker 9 sets
+`STRYKER_MUTATOR_WORKER`. All 8 sandboxes therefore use port 5173 with
+`reuseExistingServer: true`, so they test whichever mutant bound the port
+first. A developer's own dev server on 5173 also silently becomes the server
+under test.
+**Fix:** derive the port from `STRYKER_MUTATOR_WORKER`, and disable reuse under
+Stryker and CI.
 
-Both were commented out of `PUBLISH_ORDER` while still listed in
-`scripts/pack-local.mjs` and `scripts/fix-workspace-deps.mjs`. Anyone running
-`npm i @leandown/markdown-it` got whatever stale version last went up, or nothing.
-**Fix:** restored both to `PUBLISH_ORDER` (order preserves dependency layering).
+### P4. Release scripts check too little `[Low]`
+- **Publish not idempotent:** `scripts/publish-packages.mjs:106-130` publishes
+  every package unconditionally. A version that wasn't bumped aborts the run
+  after the earlier packages are already live. Fix: skip versions that
+  `npm view` already shows.
+- **verify-publish too shallow:** `scripts/verify-publish.mjs:85-93` checks
+  only `import` strings, not `types` or whether files exist. It passes
+  blueprint's `"./app": "./src/app/main.tsx"`, which ships raw TSX.
 
-### 3. `@leandown/mdbook` sat outside the release pipeline `[Medium]` `Fixed`
-`packages/mdbook/package.json`, `scripts/*.mjs`
-
-mdbook appeared in none of `PUBLISH_ORDER`, `pack-local`, or
-`fix-workspace-deps`, and its `@leandown/core` dependency was a hand-pinned
-`^0.0.16` that drifts from the actual core version instead of `workspace:*`.
-**Fix:** added mdbook to all three scripts and switched its core dep to
-`workspace:*` (resolved to the concrete `^{version}` at publish time).
-
-### 4. Published entry points resolved to TS source unless one script ran `[High]` `Fixed`
-`packages/{core,markdown-it,comark}/package.json`
-
-`exports["."].import` points at `./src/index.ts` while `files` ships only `dist`.
-Correct resolution depended entirely on `publish-packages.mjs` promoting
-`publishConfig.exports` → top-level. `core`, `markdown-it`, and `comark` also had
-no `prepack`, so `dist` wasn't guaranteed fresh (or present) before packing — a
-plain `npm publish`/`npm pack` outside the release script would ship a package
-whose entry point isn't in the tarball.
-**Fix:** added `prepack: "bun run build"` to those three packages so `dist` is
-always built before pack/publish (`pnpm pack`/`npm publish` both run `prepack`).
-
-### 5. Promoted `publishConfig.exports` triggered an npm deprecation `[Low]` `Fixed`
-`scripts/publish-packages.mjs`
-
-The script copied `publishConfig.exports` to the top level but left the original
-in place, so npm warned: *"Unknown publishConfig config 'exports'. This will stop
-working in the next major version of npm."*
-**Fix:** delete each promoted key from `publishConfig` after hoisting it (and drop
-`publishConfig` entirely once empty), silencing the warning and future-proofing
-against npm removing the behaviour.
-
-### 6. `mdbook` build had a shell race `[Medium]` `Fixed`
-`packages/mdbook/package.json`
-
-The build was
-`bun build main.ts … & bun build runtime-entry.ts … && cp …`. The `&`
-backgrounded the first build, so `prepack`'s subsequent `chmod +x dist/main.js`
-could run before `dist/main.js` had been written.
-**Fix:** serialize the three steps with `&&`.
-
-### 7. No actionable message when `lake`/Lean is missing `[Low]` `Fixed`
-`packages/core/src/client.ts`, `packages/blueprint/src/commands/docs.ts`
-
-`spawn("lake", …)` in both the core LSP client and blueprint's docs command
-surfaced only a raw `spawn lake ENOENT`. (Before core #1's fix, a missing `lake`
-also hung the build forever rather than erroring.)
-**Fix:** map `ENOENT` to a message pointing at the elan installer in both spawn
-sites.
+### P5. Dependency and metadata issues `[Low]`
+- **TypeScript in consumers:** `typescript: ^5` is a peerDependency of the
+  runtime packages, so npm auto-installs it for consumers.
+- **remark types under pnpm:** `packages/remark/dist/index.d.ts` imports
+  `unified` and `mdast` types that are only devDependencies, so they fail to
+  resolve under pnpm.
+- **Loose comark range:** `comark: ">=0.1.0"` accepts any future major
+  version, while the code relies on the 0.4 `post` API.
+- **Wrong docs:** the markdown-it and comark READMEs are copies of the remark
+  README, and the JSDoc imports reference `markdown-it-lean` / `comark-lean`.
 
 ---
 
-## VS Code extension
+## Test coverage gaps
 
-### 1. No debounce + reentrancy race in document-change sync `[High]`
-`packages/vscode/src/extension.ts:40-45` → `syncMarkdownToLean` (`:540-627`)
-
-`onDidChangeTextDocument` fires on every keystroke and calls the fully-async
-`syncMarkdownToLean` with no debounce and no in-flight lock. Two rapid edits launch
-concurrent runs that race on `applyEdit` + `leanDoc.save()` (`:598-608`), so the
-companion `.lean` file can be saved with stale content, desyncing diagnostics/hover.
-**Fix:** debounce per-URI and serialize sync per document.
-
-### 2. Full recursive filesystem scan on every keystroke `[High]`
-`packages/vscode/src/extension.ts` `getCompanionUris` (`:544`) →
-`findClosestLeanProject` (`:356-425`) → `findLeanProjectsInDir` (`:388-407`)
-
-Every change triggers a synchronous recursive `fs.readdirSync` walk (depth 5)
-across all workspace folders + repo root. Combined with #1 (no debounce) this
-blocks the extension host on large repos.
-**Fix:** cache the resolved companion URI/project root per markdown URI.
-
-### 3. Definition provider mutates VS Code's returned objects `[Medium]`
-`packages/vscode/src/extension.ts:217-223`
-
-```ts
-if ("targetUri" in res) { ...; res.targetUri = state.markdownUri; // mutating command result
-```
-
-`res` comes from `vscode.executeDefinitionProvider`, which may cache/reuse it.
-Mutating `targetUri` in place can corrupt VS Code internal state. (The `Location`
-branch at `:227` already builds a fresh object.)
-**Fix:** construct a fresh `vscode.LocationLink`.
-
-### 4. `ensureLeanClientStarted` permanently disables retry on failure `[Medium]`
-`packages/vscode/src/extension.ts:653-689`
-
-`state.hasStartedClient = true` is set at `:655` before the
-`openTextDocument`/`showTextDocument` block and never reset if that block throws
-(`:687` only logs). A transient failure permanently prevents the LSP from starting
-for that document.
-**Fix:** set the flag only after success, or reset it in the catch.
-
-### 5. Lower-severity VS Code items `[Low]`
-- **Untracked `setTimeout`s** (`extension.ts:57-65`, `:680-682`): not stored/cleared,
-  so callbacks can run after deactivation against torn-down state.
-- **Dead `hasOpenedCompanion` field** (set at `:564,623,684,699`, never read).
+- **Untested modules:**
+  - core: `client.ts`, `processor.ts`, `cache.ts`, `runtime.ts`.
+  - adapters: markdown-it, comark.
+  - blueprint: `plugin/index.ts` (the directive parser), `extractGraphData`,
+    `parseSummary`, the docs middleware.
+  - mdbook: `processMarkdown` / `main()`.
+  - vscode: `extension.ts`.
+- **No fake LSP:** a stub JSON-RPC server with Content-Length framing would
+  allow deterministic tests of X2, X5, X9 and X11 without Lean installed.
+- **Backend tests check methods one at a time**, never the assembled output.
+  That is how C1 got through.
+- **Missing scenarios:**
+  - concurrent documents (X3)
+  - a failing block, or `lake` missing
+  - `</script>` in the output
+  - cache hits and invalidation (the cache lives in `test-results/` and is
+    wiped every run)
+  - process exit and shutdown
+  - nested or fenced directives, and `$` in directive bodies
+  - same-line `@[blueprint]` and namespaces in the analyzer
+  - non-root Vite `base`
+- **Weak e2e assertions:**
+  - `tests/lean.spec.ts:412`: `/(2|…)/` matches any tooltip containing "2".
+  - `:455`: reads only the first block's registry, but hover ids restart at
+    `h1` in every block.
+  - `:132` and `:420-437`: loops that pass with zero elements.
+  - `tests/blueprint.spec.ts:441-446`: accepts either 200 or 404.
+- **Stryker scope:** `mutate` covers only core and remark.
 
 ---
 
-## Notes on things checked and found OK
+## Suggested fix order
 
-- **Comark `visitNodes` `slice(2)`** (`comark/src/index.ts:71-79`): correct — see the
-  correction note above.
-- **`vscode/src/markdown-parser.ts` line/position preservation**: verified to emit
-  exactly one output line per input line in every branch, so line/column offsets map
-  1:1 to the synthetic Lean file. (Minor gaps: nested `>>` blockquotes and 4-backtick
-  fences aren't detected.)
-- **Diagnostics race**: diagnostics are read after `fileProgress` completion, which
-  mitigates most timing races; on a compile *timeout* the result is correctly not
-  cached (`compileComplete === false`).
-
----
-
-## Suggested priority order
-
-**Done** (see [Resolution status](#resolution-status)): Core #1–#4, #9, #12;
-Blueprint #2, #3; mdbook #1; all Build/release findings.
-
-Remaining, highest-impact first:
-
-1. Blueprint #1 (background docs `process.exit` tearing down the dev server) —
-   the last of the dev-server-stability cluster.
-2. Comark #1 (corrupted adapter output) and Core #14 (invalid Typst output) —
-   broken feature output.
-3. VS Code #1/#2 (keystroke-time reentrancy race + full-FS scan on every edit).
-4. Core #5 (stale cache from `cwd`-relative dep dir) and #6/#7 (per-token git
-   subprocesses; whole-tree read for fingerprinting) — correctness + perf.
-5. The remaining Medium/Low correctness and cleanup items.
+1. **Quick, high-value fixes:**
+   - X1 (escape `<`)
+   - B1 (function replacer)
+   - P1 (lockfile)
+   - B4 (version pin)
+   - M4 (`supports`)
+   - X6 (the `path.resolve` fix)
+   - C1 (Typst escaping)
+2. **LSP lifecycle:** X2, X9, X10, X11. Add the fake-LSP test harness at the
+   same time.
+3. **Per-document sessions plus single-pass elaboration:** X3 and X4. These
+   also remove most of the X5 and X7 pressure.
+4. **Cache correctness:** the rest of X6, and X5.
+5. **Blueprint:**
+   - B3 and B5, which break basic builds and deploys
+   - then a proper directive parser (B2, B6)
+   - then the graph and analyzer (B7–B9)
+6. **mdbook fence parsing** (M1–M3), **VS Code** (V1–V5) and **test harness repair** (P2, P3).
