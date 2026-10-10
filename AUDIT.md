@@ -14,6 +14,11 @@ reproduced by running the code. That was done in scratch copies, or with a real
 Lean toolchain and packed tarballs for the adapter and packaging checks.
 Speculative issues and style nits were dropped.
 
+**Threat model:** document and Lean authors are trusted. Script injection by
+whoever writes the Lean or Markdown is out of scope. Escaping bugs are reported
+only as correctness issues, meaning legitimate content that breaks the page.
+Attacks from *other* parties, such as other local users (V3), stay in scope.
+
 Severity: **High** means a crash, a hang, a security issue or broken output on
 common input. **Medium** means wrong results or large slowdowns in realistic
 setups. **Low** means an edge case or a hardening item.
@@ -24,33 +29,30 @@ setups. **Low** means an edge case or a hardening item.
 
 The most important problems, in order:
 
-1. **XSS / page breakage through the hover registry** (X1). Raw Lean source is
-   placed inside `<script type="application/json">` without escaping `</`.
-   Every adapter is affected. **(verified)**
-2. **A dead LSP is never restarted** (X2). After `lake serve` crashes, every
+1. **A dead LSP is never restarted** (X2). After `lake serve` crashes, every
    later block waits out timeouts and then throws. mdbook exits 0 with empty
    output and hides the cause. **(verified)**
-3. **One processor's state is shared by concurrent documents** (X3). Astro and
+2. **One processor's state is shared by concurrent documents** (X3). Astro and
    Vite render pages in parallel, so one page's Lean code leaks into another,
    with wrong `#eval` output and spurious "already declared" errors.
    **(verified)**
-4. **O(N²) re-elaboration** (X4). Each block reopens a fresh document holding
+3. **O(N²) re-elaboration** (X4). Each block reopens a fresh document holding
    all earlier blocks: 20 blocks took 8.7 s against 0.67 s as one block.
    **(verified)**
-5. **The comark adapter emits escaped HTML** (A1). Lean output appears as
+4. **The comark adapter emits escaped HTML** (A1). Lean output appears as
    literal text. **(verified)**
-6. **The `TypstBackend` output never compiles** (C1). Nested `#raw("#raw(...)")`.
+5. **The `TypstBackend` output never compiles** (C1). Nested `#raw("#raw(...)")`.
    **(verified)**
-7. **The blueprint directive parser corrupts content** (B1, B2). `` $` `` /
+6. **The blueprint directive parser corrupts content** (B1, B2). `` $` `` /
    `$$` in a body triggers `String.replace` substitution, and the scaffolded
    `index.md` hits this. Nested, unclosed and fenced directives are mangled.
    **(verified)**
-8. **Release CI is broken** (P1). `bun.lock` is stale after the 0.0.20 bump,
+7. **Release CI is broken** (P1). `bun.lock` is stale after the 0.0.20 bump,
    so `bun install --frozen-lockfile` fails. **(verified)**
-9. **`blueprint build` exits 1 on a fresh `init` project** (B3), because
+8. **`blueprint build` exits 1 on a fresh `init` project** (B3), because
    `docsCommand` calls `process.exit` inside a `try`.
-10. **The VS Code extension uses a predictable `/tmp` project** (V3). Another
-    local user can plant a `lakefile.lean` that runs as you.
+9. **The VS Code extension uses a predictable `/tmp` project** (V3). Another
+   local user can plant a `lakefile.lean` that runs as you.
 
 ---
 
@@ -58,15 +60,18 @@ The most important problems, in order:
 
 These affect every consumer: remark, markdown-it, comark, mdbook and blueprint.
 
-### X1. Hover registry breaks out of its `<script>` tag (XSS) `[High]` (verified)
+### X1. Hover registry breaks out of its `<script>` tag `[Medium]` (verified)
 `packages/core/src/client.ts:653`, `:396`; `packages/core/src/runtime.ts:247`
 ```ts
 `<script type="application/json" class="lean-hover-data">${JSON.stringify(registry)}</script>`
 const word = (lines[l] || "").substring(sChar, eChar);
 ```
 The `registry.words` keys are raw source substrings, and `JSON.stringify` does
-not escape `<`. The input `def s : String := "</script><img src=x onerror=alert(1)>"`
-closes the script early, and the `<img onerror>` then runs. When no
+not escape `<`. The input `def s : String := "</script>"` closes the script early. The author
+is trusted, so this is not a security issue. It is a correctness one: any
+legitimate string literal or docstring containing `</script>` (for example,
+Lean code about HTML) truncates the JSON. Every hover in that block then stops
+working, and JSON text appears on the page. When no
 `compileMarkdown` is supplied (the comark default is the identity function),
 the `hovers` values are raw markdown or diagnostic text. `runtime.ts:247` then
 assigns them to `innerHTML`.
@@ -320,9 +325,10 @@ With `base: "/repo/"` (a GitHub Pages project site):
 drop the manual `replace(BASE, "")`.
 
 ### B6. No HTML escaping of labels or attributes `[Medium]` (verified)
+The author is trusted, so this is a correctness issue, not a security one.
 `packages/blueprint/src/plugin/index.ts:96-157`
-`(owner := "x\" onclick=\"alert(1)")` produces a working attribute injection,
-because `\"` is accepted by the regex but never unescaped. Ordinary labels such
+An owner value containing an escaped quote, `(owner := "Jane \"JD\" Doe")`,
+breaks the attribute: `\"` is accepted by the regex but never unescaped. Ordinary labels such
 as `"a<b"` or `"f & g"` produce broken markup.
 **Fix:** unescape `\\.` in `parseInfo`, and pass every interpolated value
 through `escapeHtml`.
@@ -605,13 +611,13 @@ Stryker and CI.
 ## Suggested fix order
 
 1. **Quick, high-value fixes:**
-   - X1 (escape `<`)
    - B1 (function replacer)
    - P1 (lockfile)
    - B4 (version pin)
    - M4 (`supports`)
    - X6 (the `path.resolve` fix)
    - C1 (Typst escaping)
+   - X1 (escape `<`)
 2. **LSP lifecycle:** X2, X9, X10, X11. Add the fake-LSP test harness at the
    same time.
 3. **Per-document sessions plus single-pass elaboration:** X3 and X4. These
