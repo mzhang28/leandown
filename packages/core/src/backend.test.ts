@@ -1,5 +1,5 @@
 import { describe, test, expect } from "bun:test";
-import { HtmlBackend, TypstBackend } from "./backend.ts";
+import { HtmlBackend, TypstBackend, TYPST_PREAMBLE } from "./backend.ts";
 import type { Token, DiagnosticPosition } from "./lib.ts";
 
 describe("HtmlBackend", () => {
@@ -127,64 +127,79 @@ describe("TypstBackend", () => {
     });
   });
 
-  test("escape", () => {
+  test("escape wraps text in a raw string literal", () => {
     expect(backend.escape('x = "hello"\\world')).toBe('#raw("x = \\"hello\\"\\\\world")');
   });
 
-  test("wrapBlock", () => {
-    const wrapped = backend.wrapBlock("content");
-    expect(wrapped).toContain("#block(");
-    expect(wrapped).toContain('fill: rgb("f5f5f5")');
-    expect(wrapped).toContain("content");
+  test("escape drops carriage returns and emits nothing for empty text", () => {
+    expect(backend.escape("a\r")).toBe('#raw("a")');
+    expect(backend.escape("")).toBe("");
+    expect(backend.escape("\r")).toBe("");
+  });
+
+  test("wrapBlock calls lean-block from the preamble", () => {
+    expect(backend.wrapBlock("content")).toBe("#lean-block[\ncontent\n]\n");
+    expect(TYPST_PREAMBLE).toContain("#let lean-block(");
+    expect(TYPST_PREAMBLE).toContain("#let lean-token(");
   });
 
   test("joinLines", () => {
     expect(backend.joinLines(["line1", "line2"])).toBe("line1#linebreak()\nline2");
   });
 
-  test("renderTokenStart & renderTokenEnd", () => {
-    // 1. Plain token (no type/id/link)
-    const token1: Token = { line: 0, start: 0, length: 3, type: "" };
-    expect(backend.renderTokenStart(token1)).toBe('#raw("');
-    expect(backend.renderTokenEnd(token1)).toBe('")');
+  test("unstyled tokens emit no markup of their own", () => {
+    const token: Token = { line: 0, start: 0, length: 3, type: "" };
+    expect(backend.renderTokenStart(token)).toBe("");
+    expect(backend.renderTokenEnd(token)).toBe("");
+  });
 
-    // 2. Styled token
-    const token2: Token = { line: 0, start: 0, length: 3, type: "keyword" };
-    expect(backend.renderTokenStart(token2)).toBe('#lean-token(type: "keyword")[#raw("');
-    expect(backend.renderTokenEnd(token2)).toBe('")]');
+  test("styled tokens open and close a content block, never a string", () => {
+    const keyword: Token = { line: 0, start: 0, length: 3, type: "keyword" };
+    expect(backend.renderTokenStart(keyword)).toBe('#lean-token(type: "keyword")[');
+    expect(backend.renderTokenEnd(keyword)).toBe("]");
 
-    // 3. Local definition definition token
-    const token3: Token = {
+    const def: Token = {
       line: 0,
       start: 4,
       length: 5,
       type: "function",
       groupId: "ref-1-2",
-      isDefinition: true
+      isDefinition: true,
     };
-    expect(backend.renderTokenStart(token3)).toBe('#lean-token(type: "function", id: "ref_1_2", isDef: true)[#raw("');
-    expect(backend.renderTokenEnd(token3)).toBe('")]');
+    expect(backend.renderTokenStart(def)).toBe(
+      '#lean-token(type: "function", id: "ref_1_2", isDef: true)['
+    );
 
-    // 4. Local definition reference token
-    const token4: Token = {
+    const ref: Token = { line: 0, start: 4, length: 5, type: "function", groupId: "ref-1-2" };
+    expect(backend.renderTokenStart(ref)).toBe('#lean-token(type: "function", id: "ref_1_2")[');
+  });
+
+  test("permalinks are escaped", () => {
+    const token: Token = {
       line: 0,
       start: 4,
       length: 5,
       type: "function",
-      groupId: "ref-1-2",
+      permalink: 'https://github.com/a"b\\c',
     };
-    expect(backend.renderTokenStart(token4)).toBe('#lean-token(type: "function", id: "ref_1_2")[#raw("');
-    expect(backend.renderTokenEnd(token4)).toBe('")]');
+    expect(backend.renderTokenStart(token)).toBe(
+      '#lean-token(type: "function", link: "https://github.com/a\\"b\\\\c")['
+    );
+  });
 
-    // 5. External link token
-    const token5: Token = {
-      line: 0,
-      start: 4,
-      length: 5,
-      type: "function",
-      permalink: "https://github.com/..."
-    };
-    expect(backend.renderTokenStart(token5)).toBe('#lean-token(type: "function", link: "https://github.com/...")[#raw("');
-    expect(backend.renderTokenEnd(token5)).toBe('")]');
+  test("nested tokens produce balanced markup", () => {
+    const outer: Token = { line: 0, start: 0, length: 9, type: "hover-span", permalink: "https://x" };
+    const inner: Token = { line: 0, start: 1, length: 1, type: "variable" };
+    const out =
+      backend.renderTokenStart(outer) +
+      backend.escape("(") +
+      backend.renderTokenStart(inner) +
+      backend.escape("n") +
+      backend.renderTokenEnd(inner) +
+      backend.escape(" : Nat)") +
+      backend.renderTokenEnd(outer);
+    expect(out).toBe(
+      '#lean-token(type: "hover-span", link: "https://x")[#raw("(")#lean-token(type: "variable")[#raw("n")]#raw(" : Nat)")]'
+    );
   });
 });

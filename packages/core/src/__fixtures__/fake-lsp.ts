@@ -1,7 +1,8 @@
 /**
  * Minimal stand-in for `lake serve`, speaking Content-Length framed JSON-RPC.
- * Answers `initialize` and `semanticTokens/full`, replies `null` to every
- * other request, and reports each opened document as fully compiled.
+ * Answers `initialize` and `semanticTokens/full` (marking `def`, `theorem`
+ * and `by` as keywords), replies `null` to every other request, and reports
+ * each opened document as fully compiled.
  *
  * Flags (failures are counted in --state so they span restarts):
  *   --state=<file>       counter file shared across launches
@@ -31,6 +32,24 @@ if (bump("starts") <= Number(flags["crash-starts"] ?? 0)) {
   process.exit(1);
 }
 
+const documents = new Map<string, string>();
+
+/** LSP relative encoding: [deltaLine, deltaStart, length, type, modifiers]. */
+function keywordTokens(text: string): number[] {
+  const data: number[] = [];
+  let prevLine = 0;
+  let prevStart = 0;
+  text.split("\n").forEach((line, lineNo) => {
+    for (const m of line.matchAll(/\b(def|theorem|by)\b/g)) {
+      const start = m.index!;
+      data.push(lineNo - prevLine, lineNo === prevLine ? start - prevStart : start, m[0].length, 0, 0);
+      prevLine = lineNo;
+      prevStart = start;
+    }
+  });
+  return data;
+}
+
 function send(msg: object): void {
   const payload = JSON.stringify({ jsonrpc: "2.0", ...msg });
   process.stdout.write(`Content-Length: ${Buffer.byteLength(payload)}\r\n\r\n${payload}`);
@@ -43,6 +62,7 @@ function handle(msg: any): void {
       process.stderr.write("fake-lsp: crashing on didOpen\n");
       process.exit(1);
     }
+    documents.set(uri, text);
     send({ method: "$/lean/fileProgress", params: { textDocument: { uri }, processing: [] } });
     return;
   }
@@ -53,7 +73,7 @@ function handle(msg: any): void {
   if (msg.method === "initialize") {
     result = { capabilities: { semanticTokensProvider: { legend: { tokenTypes: ["keyword"] } } } };
   } else if (msg.method === "textDocument/semanticTokens/full") {
-    result = { data: [] };
+    result = { data: keywordTokens(documents.get(msg.params.textDocument.uri) ?? "") };
   }
   send({ id: msg.id, result });
 }

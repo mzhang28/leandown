@@ -57,7 +57,7 @@ describe("LeanServerSupervisor", () => {
     expect(sup.state).toBe("idle");
     const res = await sup.highlight("def x := 1");
     expect(res.compileComplete).toBe(true);
-    expect(res.html).toContain("def x := 1");
+    expect(res.html).toContain(`<span class="lean-keyword">def</span> x := 1`);
     expect(states()).toEqual(["starting", "ready"]);
   });
 

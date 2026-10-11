@@ -142,6 +142,64 @@ export class HtmlBackend implements LeanHighlightBackend {
   }
 }
 
+/** Quote `text` as a Typst string literal. */
+const typstString = (text: string): string =>
+  `"${text.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+
+/**
+ * Typst definitions that {@link TypstBackend} output relies on: `lean-block`
+ * wraps each code block and `lean-token` styles each highlighted token.
+ * Include it once per document (it also ships as `@leandown/core/lean.typ`),
+ * or define your own `lean-block` / `lean-token` to restyle the output.
+ */
+export const TYPST_PREAMBLE = `// leandown: Lean highlighting for Typst (0.15+).
+// Generated code calls lean-block and lean-token; redefine either to restyle.
+
+#let lean-colors = (
+  keyword: rgb("#a626a4"),
+  variable: rgb("#e45649"),
+  property: rgb("#c18401"),
+  function: rgb("#4078f2"),
+  method: rgb("#4078f2"),
+  namespace: rgb("#c18401"),
+  type: rgb("#0184bc"),
+  class: rgb("#0184bc"),
+  struct: rgb("#0184bc"),
+  interface: rgb("#0184bc"),
+  string: rgb("#50a14f"),
+  number: rgb("#986801"),
+  comment: rgb("#2e7d32"),
+  operator: rgb("#0184bc"),
+  leanSorryLike: rgb("#e45649"),
+)
+
+// One highlighted token. \`type\` is the semantic token type, \`id\` groups
+// occurrences of the same local name (\`isDef\` marks its definition), and
+// \`link\` is a permalink to an external definition.
+#let lean-token(type: none, id: none, isDef: false, link: none, body) = {
+  let styled = if type != none and type in lean-colors {
+    text(fill: lean-colors.at(type), body)
+  } else {
+    body
+  }
+  if link != none { std.link(link, styled) } else { styled }
+}
+
+#let lean-block(body) = block(
+  fill: rgb("#fafafa"),
+  stroke: 0.5pt + rgb("#e5e5e6"),
+  inset: 8pt,
+  radius: 4pt,
+  width: 100%,
+  body,
+)
+`;
+
+/**
+ * Renders Typst markup. Every run of source text becomes `#raw("…")`, and
+ * tokens wrap their text in `#lean-token(...)[…]` content blocks, which nest
+ * the same way HTML spans do. Requires {@link TYPST_PREAMBLE}.
+ */
 export class TypstBackend implements LeanHighlightBackend {
   readonly name = "typst";
 
@@ -153,22 +211,13 @@ export class TypstBackend implements LeanHighlightBackend {
   };
 
   escape(text: string): string {
-    if (!text) return "";
-    const escaped = text.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
-    return `#raw("${escaped}")`;
+    // Lines come from splitting on "\n", so CRLF sources leave a trailing "\r".
+    const clean = text.replace(/\r/g, "");
+    return clean ? `#raw(${typstString(clean)})` : "";
   }
 
   wrapBlock(content: string): string {
-    return `#block(
-  fill: rgb("f5f5f5"),
-  inset: 8pt,
-  radius: 4pt,
-  width: 100%,
-  [
-    #set text(font: ("Liberation Mono", "DejaVu Sans Mono", "Courier New", "Courier", "monospace"), size: 9pt)
-    ${content}
-  ]
-)\n`;
+    return `#lean-block[\n${content}\n]\n`;
   }
 
   joinLines(lines: string[]): string {
@@ -176,33 +225,19 @@ export class TypstBackend implements LeanHighlightBackend {
   }
 
   renderTokenStart(token: Token): string {
-    if (!token.type && !token.groupId && !token.permalink) {
-      return '#raw("';
-    }
-
     const attrs: string[] = [];
-    if (token.type) {
-      attrs.push(`type: "${token.type}"`);
-    }
+    if (token.type) attrs.push(`type: ${typstString(token.type)}`);
     if (token.groupId) {
-      const id = token.groupId.replace(/-/g, "_");
-      attrs.push(`id: "${id}"`);
-      if (token.isDefinition) {
-        attrs.push(`isDef: true`);
-      }
+      attrs.push(`id: ${typstString(token.groupId.replace(/-/g, "_"))}`);
+      if (token.isDefinition) attrs.push("isDef: true");
     }
-    if (token.permalink) {
-      attrs.push(`link: "${token.permalink}"`);
-    }
-
-    return `#lean-token(${attrs.join(", ")})[#raw("`;
+    if (token.permalink) attrs.push(`link: ${typstString(token.permalink)}`);
+    // Unstyled tokens add nothing; their text is still emitted via escape().
+    return attrs.length ? `#lean-token(${attrs.join(", ")})[` : "";
   }
 
   renderTokenEnd(token: Token): string {
-    if (!token.type && !token.groupId && !token.permalink) {
-      return '")';
-    }
-    return '")]';
+    return token.type || token.groupId || token.permalink ? "]" : "";
   }
 }
 
