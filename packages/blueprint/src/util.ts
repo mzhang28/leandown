@@ -15,6 +15,13 @@ export interface BlueprintConfig {
   entry?: string;
   /** Output directory, relative to the blueprint root (default: "dist") */
   outDir?: string;
+  /**
+   * Typst compiler: "typst.ts" (in-process, needs leandown's build), "typst"
+   * (the CLI, 0.15+), or "auto" (default: typst.ts if usable, else the CLI).
+   */
+  compiler?: "auto" | "typst.ts" | "typst";
+  /** Path to the `typst` binary (default: $TYPST, then `typst` on PATH). */
+  typstPath?: string;
 }
 
 /**
@@ -67,6 +74,8 @@ export function siteOptions(root: string, cfg: BlueprintConfig) {
     outDir: cfg.outDir ?? "dist",
     leanProjectPath: cfg.leanProjectPath ? path.resolve(root, cfg.leanProjectPath) : undefined,
     leanImports: cfg.leanImports,
+    compiler: cfg.compiler,
+    typstPath: cfg.typstPath ? path.resolve(root, cfg.typstPath) : undefined,
   };
 }
 

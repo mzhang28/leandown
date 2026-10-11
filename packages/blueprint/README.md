@@ -8,8 +8,7 @@ Blueprints compile to a static HTML site: one page per chapter, Typst math as
 MathML, Lean code highlighted with hovers (via leandown), and `@label`
 references that work across pages.
 
-> **Status:** this uses Typst's experimental HTML and bundle export, through
-> leandown's build of typst.ts (stock typst.ts can't compile bundles yet).
+> **Status:** this uses Typst's experimental HTML and bundle export.
 
 ## Quick start
 
@@ -81,9 +80,24 @@ check names; set `"leanImports"` in `blueprint.json` to import something else.
   "name": "my-blueprint",
   "leanProjectPath": "./lean",
   "entry": "main.typ",
-  "outDir": "dist"
+  "outDir": "dist",
+  "compiler": "auto"
 }
 ```
+
+## Typst compiler
+
+Blueprint compiles with one of:
+
+- **typst.ts** (default): leandown's build of the typst.ts Node compiler,
+  installed as an optional dependency. It runs in-process, so rebuilds take
+  milliseconds. Stock typst.ts releases can't compile bundles yet.
+- **The `typst` CLI**, version 0.15 or later: `$TYPST`, `typst` on your
+  `PATH`, or `"typstPath"` in blueprint.json.
+
+`"compiler": "auto"` (the default) uses typst.ts when it's installed and able
+to compile bundles, and otherwise the CLI. Set `"typst.ts"` or `"typst"` to
+pick one; with `"typst"`, typst.ts is never loaded.
 
 ## Commands
 

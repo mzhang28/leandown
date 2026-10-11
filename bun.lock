@@ -50,7 +50,6 @@
       },
       "dependencies": {
         "@leandown/core": "0.0.21",
-        "@myriaddreamin/typst-ts-node-compiler": "0.8.0-rc3",
         "cmd-ts": "^0.13.0",
         "parse5": "^8.0.0",
         "remark": "^15.0.1",
@@ -64,6 +63,9 @@
         "cytoscape": "^3.34.0",
         "cytoscape-cola": "^2.5.1",
         "typescript": "^5",
+      },
+      "optionalDependencies": {
+        "@myriaddreamin/typst-ts-node-compiler": "0.8.0-rc3",
       },
       "peerDependencies": {
         "typescript": "^5",

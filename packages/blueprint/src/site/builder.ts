@@ -4,21 +4,17 @@ import { fileURLToPath } from "node:url";
 import { remark } from "remark";
 import remarkHtml from "remark-html";
 import { LeanHighlightProcessor } from "@leandown/core";
-import { NodeCompiler } from "@myriaddreamin/typst-ts-node-compiler";
 import { computeStatuses, probeDeclarations } from "../lean/analyzer.ts";
 import { findLeanSources } from "../lean/lakefile.ts";
 import type { DeclFacts, NodeStatus } from "../lean/types.ts";
 import { htmlToTree, type TreeNode } from "./tree.ts";
-import "./typst-bundle.ts";
+import { createCompiler, type BundleCompiler, type CompiledFile, type CompilerChoice } from "./compiler.ts";
 
 /** Where the built package keeps lib.typ and the browser assets (dist/). */
 const PACKAGE_DIST = path.dirname(fileURLToPath(import.meta.url));
 
 /** Files the Typst library emits for the CLI; never published. */
 const INTERNAL_PREFIX = "__blueprint/";
-
-/** Typst warns about these on every compile; they say nothing actionable. */
-const EXPERIMENTAL_WARNING = /export is (experimental|under active development)/;
 
 export interface SiteOptions {
   /** Blueprint project root (contains blueprint.json). */
@@ -31,6 +27,10 @@ export interface SiteOptions {
   leanProjectPath?: string;
   /** Modules to import when checking declarations. */
   leanImports?: string[];
+  /** Which Typst compiler to use (default "auto"). */
+  compiler?: CompilerChoice;
+  /** Path to the `typst` binary, for the CLI compiler. */
+  typstPath?: string;
 }
 
 interface BlueprintNodeMeta {
@@ -39,11 +39,6 @@ interface BlueprintNodeMeta {
   lean: string[];
   uses: string[];
   mathlib: boolean;
-}
-
-interface CompiledFile {
-  path: string;
-  content: Buffer;
 }
 
 export interface BuildResult {
@@ -60,13 +55,21 @@ export interface BuildResult {
  * into `.blueprint/data.json` for the second pass to render.
  */
 export class SiteBuilder {
-  private compiler: NodeCompiler;
+  private compiler: Promise<BundleCompiler>;
+  private announced = false;
   private processor: LeanHighlightProcessor | undefined;
   private statusCache: { key: string; facts: Map<string, DeclFacts> } | undefined;
   private readonly dataDir: string;
 
   constructor(private readonly options: SiteOptions) {
-    this.compiler = NodeCompiler.create({ workspace: options.root });
+    this.compiler = createCompiler({
+      root: options.root,
+      entry: path.join(options.root, options.entry),
+      choice: options.compiler,
+      typstPath: options.typstPath,
+    });
+    // Reported when build() awaits it.
+    this.compiler.catch(() => {});
     this.dataDir = path.join(options.root, ".blueprint");
     if (options.leanProjectPath && fs.existsSync(options.leanProjectPath)) {
       this.processor = new LeanHighlightProcessor({
@@ -79,7 +82,18 @@ export class SiteBuilder {
   async build(): Promise<BuildResult> {
     this.prepare();
 
-    const first = this.compile();
+    let compiler: BundleCompiler;
+    try {
+      compiler = await this.compiler;
+    } catch (err) {
+      console.error(`[blueprint] ${(err as Error).message}`);
+      return { ok: false, files: [] };
+    }
+    if (!this.announced) {
+      console.log(`[blueprint] compiling with ${compiler.name}`);
+      this.announced = true;
+    }
+    const first = await compiler.bundle();
     if (!first) return { ok: false, files: [] };
     const blocks = readJson<string[]>(first, "lean-blocks.json") ?? [];
     const nodes = readJson<BlueprintNodeMeta[]>(first, "nodes.json") ?? [];
@@ -88,7 +102,7 @@ export class SiteBuilder {
     const status = await this.statuses(nodes);
     this.writeData({ lean, status });
 
-    const second = this.compile();
+    const second = await compiler.bundle();
     if (!second) return { ok: false, files: [] };
     return { ok: true, files: this.write(second) };
   }
@@ -111,34 +125,6 @@ export class SiteBuilder {
 
   private writeData(data: { lean: Record<string, TreeNode>; status: Record<string, NodeStatus> }): void {
     fs.writeFileSync(path.join(this.dataDir, "data.json"), JSON.stringify(data));
-  }
-
-  private compile(): CompiledFile[] | undefined {
-    if (!this.compiler.bundle) {
-      throw new Error(
-        "This build of @myriaddreamin/typst-ts-node-compiler can't compile Typst bundles; " +
-          "blueprint needs leandown's typst.ts build.",
-      );
-    }
-    const result = this.compiler.bundle({
-      mainFilePath: path.join(this.options.root, this.options.entry),
-    });
-    const warnings = result.takeWarnings();
-    if (warnings) this.report(warnings);
-    if (result.hasError()) {
-      result.printErrors();
-      return undefined;
-    }
-    this.compiler.evictCache(30);
-    return result.result?.files();
-  }
-
-  private report(error: Parameters<NodeCompiler["fetchDiagnostics"]>[0]): void {
-    for (const d of this.compiler.fetchDiagnostics(error) as { message?: string; path?: string; range?: string }[]) {
-      if (!d.message || EXPERIMENTAL_WARNING.test(d.message)) continue;
-      const where = d.path ? `${d.path}${d.range ? `:${d.range}` : ""}: ` : "";
-      console.warn(`[blueprint] warning: ${where}${d.message}`);
-    }
   }
 
   /** Highlight each Lean block in document order; later blocks see earlier ones. */
