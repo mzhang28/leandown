@@ -29,25 +29,26 @@ function compile(body: string): { raws: string[]; links: string[] } {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "leandown-typst-test-"));
   const file = path.join(dir, "doc.typ");
   fs.writeFileSync(file, TYPST_PREAMBLE + "\n" + body);
+  try {
+    const compiled = spawnSync(typst!, ["compile", file, path.join(dir, "doc.pdf")], {
+      encoding: "utf8",
+    });
+    // Any error or warning (e.g. an unknown font) fails the test.
+    expect(compiled.stderr).toBe("");
+    expect(compiled.status).toBe(0);
 
-  const compiled = spawnSync(typst!, ["compile", file, path.join(dir, "doc.pdf")], {
-    encoding: "utf8",
-  });
-  // Any error or warning (e.g. an unknown font) fails the test.
-  expect(compiled.stderr).toBe("");
-  expect(compiled.status).toBe(0);
-
-  const evaluate = (expr: string): string[] => {
-    const res = spawnSync(typst!, ["eval", expr, "--in", file], { encoding: "utf8" });
-    expect(res.status).toBe(0);
-    return JSON.parse(res.stdout);
-  };
-  const result = {
-    raws: evaluate("query(raw).map(it => it.text)"),
-    links: evaluate("query(link).map(it => it.dest)"),
-  };
-  fs.rmSync(dir, { recursive: true, force: true });
-  return result;
+    const evaluate = (expr: string): string[] => {
+      const res = spawnSync(typst!, ["eval", expr, "--in", file], { encoding: "utf8" });
+      expect(res.status).toBe(0);
+      return JSON.parse(res.stdout);
+    };
+    return {
+      raws: evaluate("query(raw).map(it => it.text)"),
+      links: evaluate("query(link).map(it => it.dest)"),
+    };
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 }
 
 describe.skipIf(!typst)("TypstBackend output compiles with typst 0.15", () => {

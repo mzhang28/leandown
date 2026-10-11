@@ -15,13 +15,21 @@ const FAKE_LSP = path.join(import.meta.dir, "__fixtures__", "fake-lsp.ts");
 const FAST: LeanServerOptions = { baseDelayMs: 10, maxDelayMs: 40 };
 
 const supervisors: LeanServerSupervisor[] = [];
+const tempDirs: string[] = [];
 afterEach(() => {
   for (const s of supervisors.splice(0)) s.killSync();
+  for (const d of tempDirs.splice(0)) fs.rmSync(d, { recursive: true, force: true });
 });
+
+function tempDir(): string {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "leandown-sup-test-"));
+  tempDirs.push(dir);
+  return dir;
+}
 
 /** A supervisor over the fake server, recording every state transition. */
 function setup(fakeFlags: string[] = [], options: LeanServerOptions = {}) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "leandown-sup-test-"));
+  const dir = tempDir();
   const stateFile = path.join(dir, "state.json");
   const transitions: LeanServerStateInfo[] = [];
   const sup = new LeanServerSupervisor(
@@ -161,7 +169,7 @@ describe("LeanServerSupervisor", () => {
   });
 
   test("a missing binary fails immediately without retrying", async () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "leandown-sup-test-"));
+    const dir = tempDir();
     const transitions: LeanServerState[] = [];
     const sup = new LeanServerSupervisor(
       dir,
@@ -195,7 +203,7 @@ describe("LeanServerSupervisor", () => {
 
 describe("LeanLSPClient death handling", () => {
   test("rejects in-flight and later calls once the process dies", async () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "leandown-sup-test-"));
+    const dir = tempDir();
     const stateFile = path.join(dir, "state.json");
     const client = new LeanLSPClient(dir, {
       command: [process.execPath, FAKE_LSP, `--state=${stateFile}`, "--crash-opens=1"],
