@@ -42,6 +42,8 @@ setups. **Low** means an edge case or a hardening item.
   on deactivate.
 - **X6** (cache hits still start Lean): fixed; servers now start lazily on the
   first cache miss. The rest of X6 is still open.
+- **Release tooling** (P4, F6, pre-built blueprint app): fixed. Nx Release
+  replaces the custom publish scripts; exports point at `dist/`.
 - **Blueprint** (B1–B7, F1, F2, and most of B10/B11): fixed. A fresh
   `init` → `npm install` → `build`/`serve` now works from packed tarballs,
   including under `base: "/repo/"`. `blueprint build` exits once done.
@@ -574,6 +576,10 @@ update it.
 **Fix:** reuse the `npm pack` approach from `verify-publish.mjs` and read the
 version from package.json.
 
+**Partly fixed** (`50512e7`): `bun run pack` replaces `pack-local.mjs`, and the
+spec reads the version from package.json. The suite is still skipped, with
+stale paths and a non-persistent cache.
+
 ### P3. Stryker/Playwright port isolation never takes effect `[Medium]`
 `tests/playwright.config.ts:4`; `tests/blueprint.spec.ts:106`
 They read `STRYKER_SANDBOX_WORKER_INDEX`, but Stryker 9 sets
@@ -584,7 +590,7 @@ under test.
 **Fix:** derive the port from `STRYKER_MUTATOR_WORKER`, and disable reuse under
 Stryker and CI.
 
-### P4. Release scripts check too little `[Low]`
+### ~~P4. Release scripts check too little `[Low]`~~ Fixed in `50512e7`
 - **Publish not idempotent:** `scripts/publish-packages.mjs:106-130` publishes
   every package unconditionally. A version that wasn't bumped aborts the run
   after the earlier packages are already live. Fix: skip versions that
@@ -645,8 +651,7 @@ Vite optimises dependencies.
 to `@leandown/blueprint > react`, `… > react-dom/client`,
 `… > @tanstack/react-router`, `… > @leandown/core/runtime`, and
 `@leandown/blueprint/graph-renderer`. Ship the app pre-built as well (see P4).
-The `optimizeDeps.include` part is done; shipping the app pre-built is still
-open.
+Both parts are done: `./app` ships pre-built since `50512e7`.
 
 ### F3. mdbook README config can't find the preprocessor `[Medium]` (verified)
 `packages/mdbook/README.md`. The README installs with `--save-dev`, but
@@ -668,7 +673,7 @@ and the Typst snippet both print their output and then never exit, because the
 pooled `lake serve` keeps the event loop alive. Any build script that uses them
 hangs CI. This should move up from Low.
 
-### F6. `@leandown/core` ships test artefacts `[Low]`
+### ~~F6. `@leandown/core` ships test artefacts `[Low]`~~ Fixed in `50512e7`
 `tsc -p tsconfig.build.json` emits `*.test.d.ts` and `__fixtures__/` into
 `dist/`, and they are published.
 **Fix:** exclude `**/*.test.ts` and `__fixtures__` in `tsconfig.build.json`.
@@ -707,10 +712,8 @@ installed through the `peerDependencies` of `@leandown/core` and
   - ~~same-line `@[blueprint]` and namespaces in the analyzer~~ (the
     analyzer now asks Lean; namespaces and indirect sorry are tested in `945194b`)
   - non-root Vite `base`
-- **Blueprint e2e can't run as written:** `tests/blueprint.spec.ts:64` pins
-  `PACK_VERSION = "0.0.11"`, and `scripts/pack-local.mjs` fails on the second
-  package because `pnpm pack` can't resolve `workspace:*` in a bun-installed
-  tree (`ERR_PNPM_CANNOT_RESOLVE_WORKSPACE_PROTOCOL`).
+- **Blueprint e2e can't run as written:** packing is fixed (`50512e7`), but the
+  suite is still skipped (see P2).
 - **Weak e2e assertions:**
   - `tests/lean.spec.ts:412`: `/(2|…)/` matches any tooltip containing "2".
   - `:455`: reads only the first block's registry, but hover ids restart at
