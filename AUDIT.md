@@ -43,9 +43,9 @@ setups. **Low** means an edge case or a hardening item.
 
 The most important problems, in order:
 
-1. **A dead LSP is never restarted** (X2). After `lake serve` crashes, every
+1. ~~**A dead LSP is never restarted** (X2). After `lake serve` crashes, every
    later block waits out timeouts and then throws. mdbook exits 0 with empty
-   output and hides the cause. **(verified)**
+   output and hides the cause. **(verified)**~~ **Fixed** (`37b1065`)
 2. **One processor's state is shared by concurrent documents** (X3). Astro and
    Vite render pages in parallel, so one page's Lean code leaks into another,
    with wrong `#eval` output and spurious "already declared" errors.
@@ -61,8 +61,8 @@ The most important problems, in order:
    `$$` in a body triggers `String.replace` substitution, and the scaffolded
    `index.md` hits this. Nested, unclosed and fenced directives are mangled.
    **(verified)**
-7. **Release CI is broken** (P1). `bun.lock` is stale after the 0.0.20 bump,
-   so `bun install --frozen-lockfile` fails. **(verified)**
+7. ~~**Release CI is broken** (P1). `bun.lock` is stale after the 0.0.20 bump,
+   so `bun install --frozen-lockfile` fails. **(verified)**~~ **Fixed** (`6e67a85`)
 8. **`blueprint build` exits 1 on a fresh `init` project** (B3), because
    `docsCommand` calls `process.exit` inside a `try`.
 9. **The VS Code extension uses a predictable `/tmp` project** (V3). Another
@@ -93,7 +93,7 @@ assigns them to `innerHTML`.
 U+2028 and U+2029. When `compileMarkdown` is absent, escape the hover text with
 the backend's `escape` before storing it.
 
-### X2. A dead or killed LSP is never detected or respawned `[High]` (verified)
+### ~~X2. A dead or killed LSP is never detected or respawned `[High]`~~ Fixed in `37b1065`
 `packages/core/src/client.ts:59-62`, `:84-88`, `:146`, `:676-700`, `:744`
 - The `exit` handler only calls `failAllPending`. `proc` and `initPromise` stay
   set, and `compileWaiters` are never resolved.
@@ -159,9 +159,9 @@ occurred.
   each other's tooltip HTML.
 - **Fingerprint memoised forever:** it is computed once per processor. In a
   dev server, editing project `.lean` files never invalidates cached blocks.
-- **Cache hits still start Lean:** `client.start()` (`processor.ts:133-135`)
+- ~~**Cache hits still start Lean:** `client.start()` (`processor.ts:133-135`)
   runs before the cache lookup. A fully cached build still spawns `lake serve`,
-  and it fails outright if `lake` is missing.
+  and it fails outright if `lake` is missing.~~ **Fixed** (`37b1065`)
 - **VS Code companions hashed:** `collectLeanFiles` skips only
   `.lake`/`.git`/`node_modules`, so the VS Code extension's `.leandown/*.lean`
   companions are hashed. Every save in VS Code invalidates the whole cache.
@@ -220,14 +220,14 @@ instead of 130 and cuts short the host's own graceful shutdown.
 **Fix:** use the `exit` hook with a synchronous kill only, or re-raise the
 signal after cleanup.
 
-### X11. Lifecycle and protocol robustness `[Medium/Low]`
-- **stderr never drained** `[Medium]` (`client.ts:62`): stderr uses the default
+### X11. Lifecycle and protocol robustness `[Medium/Low]` (partly fixed)
+- ~~**stderr never drained** `[Medium]` (`client.ts:62`): stderr uses the default
   pipe and is never read. Heavy lake or lean logging blocks the child after
   about 64 KB, and every request then times out. Fix: `stdio: ["pipe","pipe","inherit"]`
-  or a listener that drains it.
-- **Concurrent `highlight()` on a fresh client** `[Medium]` (`client.ts:146-148`):
+  or a listener that drains it.~~ **Fixed** (`37b1065`)
+- ~~**Concurrent `highlight()` on a fresh client** `[Medium]` (`client.ts:146-148`):
   `proc` is set before `initialize` resolves, so a second caller skips the
-  await and sends `didOpen` before `initialized`. Fix: always `await this.start()`.
+  await and sends `didOpen` before `initialized`. Fix: always `await this.start()`.~~ **Fixed** (`37b1065`)
 - **Server requests taken for responses** `[Low]` (`client.ts:774`): a
   server-to-client request whose id collides with one of ours resolves our
   pending request. Fix: treat a message as a response only when `method` is
@@ -450,8 +450,10 @@ or warn when a block contains `{{#`.
 
 ### M3. Errors exit 0 and blocks run serially `[Medium]`
 `packages/mdbook/main.ts:9-37`, `:86-101`
-- **Error hidden:** see X2. The `finally { await processor.shutdown() }` hangs
-  on a dead server and Node exits 0, so the real error is never printed.
+- ~~**Error hidden:** see X2. The `finally { await processor.shutdown() }` hangs
+  on a dead server and Node exits 0, so the real error is never printed.~~
+  **Fixed** with X2: `shutdown()` skips the request on a dead server. `main.ts`
+  still needs to exit 1 on errors.
 - **One block fails the book:** there's no per-block `catch` (X9).
 - **Serial processing:** chapters run one after another, even though they are
   independent.
@@ -534,7 +536,7 @@ write an empty companion.
 
 ## Build, release & packaging
 
-### P1. `bun.lock` is stale, so release and docs CI fail at install `[High]` (verified)
+### ~~P1. `bun.lock` is stale, so release and docs CI fail at install `[High]`~~ Fixed in `6e67a85`
 The bump commit `3e3e0f9` set the versions to 0.0.20, but `bun.lock` still has
 0.0.19 entries and mdbook pins `@leandown/core: ^0.0.16`. `bun install --frozen-lockfile`
 (`.github/workflows/release.yml:38`, `deploy-docs.yml:46,62`) fails with
@@ -598,8 +600,10 @@ Stryker and CI.
     `parseSummary`, the docs middleware.
   - mdbook: `processMarkdown` / `main()`.
   - vscode: `extension.ts`.
-- **No fake LSP:** a stub JSON-RPC server with Content-Length framing would
-  allow deterministic tests of X2, X5, X9 and X11 without Lean installed.
+- ~~**No fake LSP:** a stub JSON-RPC server with Content-Length framing would
+  allow deterministic tests of X2, X5, X9 and X11 without Lean installed.~~
+  **Added** in `37b1065` (`packages/core/src/__fixtures__/fake-lsp.ts`); it can
+  be extended for X5 and X9.
 - **Backend tests check methods one at a time**, never the assembled output.
   That is how C1 got through.
 - **Missing scenarios:**
@@ -626,14 +630,14 @@ Stryker and CI.
 
 1. **Quick, high-value fixes:**
    - B1 (function replacer)
-   - P1 (lockfile)
+   - ~~P1 (lockfile)~~
    - B4 (version pin)
    - M4 (`supports`)
    - X6 (the `path.resolve` fix)
    - C1 (Typst escaping)
    - X1 (escape `<`)
-2. **LSP lifecycle:** X2, X9, X10, X11. Add the fake-LSP test harness at the
-   same time.
+2. **LSP lifecycle:** ~~X2~~, X9, X10, the rest of X11. ~~Add the fake-LSP test
+   harness at the same time.~~
 3. **Per-document sessions plus single-pass elaboration:** X3 and X4. These
    also remove most of the X5 and X7 pressure.
 4. **Cache correctness:** the rest of X6, and X5.
