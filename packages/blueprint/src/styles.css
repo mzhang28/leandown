@@ -109,6 +109,12 @@ html, body {
   background: none;
   padding: 0;
 }
+/* lean.css boxes the code itself; the pre already is one. */
+#content pre code.language-lean {
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+}
 
 /* ── Blueprint nodes ─────────────────────────────────────────────────────── */
 
@@ -250,3 +256,10 @@ html, body {
   border: 1.5px solid #aaa;
   flex-shrink: 0;
 }
+
+/* ── Typst output ───────────────────────────────────────────────────────── */
+
+#content figure { margin: 0; }
+#content math[display="block"] { display: block; margin: 0.75rem 0; }
+.blueprint-node--proof .blueprint-kind { font-style: italic; text-transform: none; }
+.nav-graph .nav-list { margin: 0; }

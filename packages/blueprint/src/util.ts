@@ -1,8 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
 
-import type { InlineConfig } from "vite";
-
 export interface BlueprintConfig {
   /** Project name */
   name: string;
@@ -13,10 +11,10 @@ export interface BlueprintConfig {
    * graph (default: the root module of every `lean_lib` in the lakefile).
    */
   leanImports?: string[];
-  /** Source directory for markdown files (default: "src") */
-  srcDir?: string;
-  /** Vite configuration — same shape as vite.config.ts UserConfig */
-  vite?: InlineConfig;
+  /** Typst entry file, relative to the blueprint root (default: "main.typ") */
+  entry?: string;
+  /** Output directory, relative to the blueprint root (default: "dist") */
+  outDir?: string;
 }
 
 /**
@@ -59,4 +57,30 @@ export function readConfig(projectRoot: string): BlueprintConfig {
 export function readConfigIfExists(projectRoot: string): BlueprintConfig | undefined {
   if (!fs.existsSync(path.join(projectRoot, "blueprint.json"))) return undefined;
   return readConfig(projectRoot);
+}
+
+/** Build options for a project, from its blueprint.json. */
+export function siteOptions(root: string, cfg: BlueprintConfig) {
+  return {
+    root,
+    entry: cfg.entry ?? "main.typ",
+    outDir: cfg.outDir ?? "dist",
+    leanProjectPath: cfg.leanProjectPath ? path.resolve(root, cfg.leanProjectPath) : undefined,
+    leanImports: cfg.leanImports,
+  };
+}
+
+/** Loads blueprint.json for the project containing the cwd, or exits. */
+export function loadProject(): { root: string; cfg: BlueprintConfig } {
+  const root = findProjectRoot(process.cwd());
+  if (!root) {
+    console.error("Error: No blueprint.json found. Run this command from within a blueprint project.");
+    process.exit(1);
+  }
+  try {
+    return { root, cfg: readConfig(root) };
+  } catch (err) {
+    console.error(`Error: ${(err as Error).message}`);
+    process.exit(1);
+  }
 }

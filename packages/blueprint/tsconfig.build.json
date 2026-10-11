@@ -17,14 +17,12 @@
     "dist",
     "src/template",
     "src/**/*.test.ts",
-    "src/**/__fixtures__"
+    "src/**/__fixtures__",
+    "src/assets"
   ],
   "references": [
     {
       "path": "../core/tsconfig.build.json"
-    },
-    {
-      "path": "../remark/tsconfig.build.json"
     }
   ]
 }

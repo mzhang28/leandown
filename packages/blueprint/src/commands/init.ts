@@ -1,48 +1,51 @@
 import fs from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const TEMPLATE_DIR = path.resolve(__dirname, "./template");
 
 export interface InitOptions {
   /** Target directory for the new blueprint project */
   dir?: string;
   /** Overwrite files even if the target directory is non-empty. */
   force?: boolean;
-  /** Version of this CLI; scaffolded `@leandown/*` deps are pinned to it. */
+  /** Version of this CLI; the scaffolded dependency is pinned to it. */
   version: string;
 }
 
-/**
- * Copy a file from the template directory to the target directory,
- * performing simple `{{key}}` placeholder substitution.
- */
-function copyTemplate(
-  templateName: string,
-  targetPath: string,
-  replacements: Record<string, string> = {}
-): void {
-  const srcPath = path.join(TEMPLATE_DIR, templateName);
+const MAIN_TYP = `#import "/.blueprint/lib.typ": *
 
-  if (!fs.existsSync(srcPath)) {
-    console.warn(`Template ${templateName} not found, skipping.`);
-    return;
-  }
+#show: blueprint.with(title: "My Blueprint")
 
-  let content = fs.readFileSync(srcPath, "utf-8");
+#chapter("index.html", title: [Introduction], include "chapters/intro.typ")
+`;
 
-  // Simple placeholder substitution
-  for (const [key, value] of Object.entries(replacements)) {
-    content = content.replace(new RegExp(`\\{\\{${key}\\}\\}`, "g"), value);
-  }
+const INTRO_TYP = `#import "/.blueprint/lib.typ": *
 
-  // Ensure parent directory exists
-  const dir = path.dirname(targetPath);
-  fs.mkdirSync(dir, { recursive: true });
+= My Blueprint
 
-  fs.writeFileSync(targetPath, content);
-}
+Welcome to your blueprint. It combines informal mathematics with links to
+formal Lean 4 proofs; the dependency graph tracks how far along each part is.
+
+#definition("add_def", lean: "Nat.add")[
+  We write $a + b$ for the result of adding $b$ to $a$.
+]
+
+#theorem("add_zero", lean: "Nat.add_zero", uses: ("add_def",))[
+  For every natural number $n$, adding zero on the right leaves it unchanged:
+  $n + 0 = n$.
+]
+
+#proof[
+  By induction on $n$, using @add_def.
+]
+
+\`\`\`lean
+theorem add_zero_right (n : Nat) : n + 0 = n := by
+  simp
+\`\`\`
+
+#theorem("add_succ", lean: "Nat.add_succ", uses: ("add_def",))[
+  For all $m, n$, we have $m + op("succ")(n) = op("succ")(m + n)$.
+]
+`;
 
 /**
  * `blueprint init [dir]` — scaffold a new blueprint project.
@@ -62,105 +65,39 @@ export async function initCommand(options: InitOptions): Promise<void> {
     console.log(`Directory '${targetDir}' already exists — will overwrite files.\n`);
   }
 
-  fs.mkdirSync(targetDir, { recursive: true });
-
   console.log(`\nCreating blueprint project in ${targetDir}\n`);
 
-  const replacements = { name: projectName };
-
-  // Write project config
-  copyTemplate("blueprint.json", path.join(targetDir, "blueprint.json"), {
-    name: projectName,
-  });
-
-  // Write Vite entry HTML
-  copyTemplate("index.html", path.join(targetDir, "index.html"), {
-    name: projectName,
-  });
-
-  // Write source files
-  copyTemplate(
-    "main.tsx",
-    path.join(targetDir, "src", "main.tsx"),
-    replacements
-  );
-  copyTemplate(
-    "index.md",
-    path.join(targetDir, "src", "index.md"),
-    replacements
-  );
-  copyTemplate(
-    "SUMMARY.md",
-    path.join(targetDir, "src", "SUMMARY.md"),
-    replacements
-  );
-
-  // Create lean directory
-  fs.mkdirSync(path.join(targetDir, "lean"), { recursive: true });
-  fs.writeFileSync(
-    path.join(targetDir, "lean", ".gitkeep"),
-    ""
-  );
-
-  // Write Vite config
-  const viteConfig = `import { defineConfig } from "vite";
-import react from "@vitejs/plugin-react";
-import { blueprint } from "@leandown/blueprint/vite";
-
-export default defineConfig({
-  plugins: [react(), blueprint()],
-});
-`;
-  fs.writeFileSync(path.join(targetDir, "vite.config.ts"), viteConfig);
-
-  // Write package.json for the blueprint project
-  const pkgJson = {
-    name: projectName,
-    private: true,
-    type: "module",
-    scripts: {
-      dev: "blueprint serve",
-      build: "blueprint build",
-    },
-    dependencies: {
-      "@leandown/blueprint": `^${options.version}`,
-      "@leandown/core": `^${options.version}`,
-      "@tanstack/react-router": "^1.0.0",
-      react: "^19.0.0",
-      "react-dom": "^19.0.0",
-      vite: "^6.0.0",
-    },
-    devDependencies: {
-      "@types/react": "^19.0.0",
-      "@types/react-dom": "^19.0.0",
-      "@vitejs/plugin-react": "^4.0.0",
-    },
+  const files: Record<string, string> = {
+    "blueprint.json": JSON.stringify({ name: projectName, leanProjectPath: "./lean" }, null, 2) + "\n",
+    "main.typ": MAIN_TYP,
+    "chapters/intro.typ": INTRO_TYP,
+    "package.json":
+      JSON.stringify(
+        {
+          name: projectName,
+          private: true,
+          type: "module",
+          scripts: { dev: "blueprint serve", build: "blueprint build" },
+          dependencies: { "@leandown/blueprint": `^${options.version}` },
+        },
+        null,
+        2,
+      ) + "\n",
+    ".gitignore": "node_modules/\ndist/\n.blueprint/\n",
+    "lean/.gitkeep": "",
   };
-  fs.writeFileSync(
-    path.join(targetDir, "package.json"),
-    JSON.stringify(pkgJson, null, 2) + "\n"
-  );
+  for (const [rel, content] of Object.entries(files)) {
+    const dest = path.join(targetDir, rel);
+    fs.mkdirSync(path.dirname(dest), { recursive: true });
+    fs.writeFileSync(dest, content);
+    console.log(`  ${rel}`);
+  }
 
-  // Write a gitignore
-  fs.writeFileSync(
-    path.join(targetDir, ".gitignore"),
-    "node_modules/\ndist/\n.env\n"
-  );
-
-  console.log("Created files:");
-  console.log(`  blueprint.json`);
-  console.log(`  vite.config.ts`);
-  console.log(`  package.json`);
-  console.log(`  .gitignore`);
-  console.log(`  index.html`);
-  console.log(`  src/main.tsx`);
-  console.log(`  src/index.md`);
-  console.log(`  src/SUMMARY.md`);
-  console.log(`  lean/`);
   console.log();
   console.log("Next steps:");
   console.log(`  cd ${targetDir}`);
-  console.log(`  bun install`);
-  console.log(`  blueprint serve    # start dev server`);
-  console.log(`  blueprint build    # build for production`);
+  console.log(`  bun install                 # or npm install`);
+  console.log(`  (cd lean && lake init ${projectName.replace(/[^A-Za-z0-9]/g, "") || "Blueprint"})`);
+  console.log(`  bun run dev                 # live preview`);
+  console.log(`  bun run build               # static site in dist/`);
 }

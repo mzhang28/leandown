@@ -1,147 +1,102 @@
 # @leandown/blueprint
 
-All-in-one CLI for managing Lean blueprint projects — markdown-based mathematical
-documents with Lean formalization tracking.
+CLI for Lean blueprint projects: mathematical documents written in
+[Typst](https://typst.app), linked to Lean 4 declarations, with a dependency
+graph that tracks formalization progress.
 
-Built on [leandown](https://github.com/mzhang28/leandown) (remark + Lean LSP)
-and [Vite](https://vitejs.dev/).
+Blueprints compile to a static HTML site: one page per chapter, Typst math as
+MathML, Lean code highlighted with hovers (via leandown), and `@label`
+references that work across pages.
 
-## Quick Start
+> **Status:** this uses Typst's experimental HTML and bundle export, through
+> leandown's build of typst.ts (stock typst.ts can't compile bundles yet).
 
-```bash
-# Create a new blueprint project
+## Quick start
+
+```sh
 blueprint init my-blueprint
 cd my-blueprint
 bun install
-
-# Start the dev server (Vite + HMR)
-blueprint serve
-
-# Build for production
-blueprint build
+(cd lean && lake init MyProject)   # or put your Lean project in lean/
+bun run dev                        # live preview
+bun run build                      # static site in dist/
 ```
 
-## Project Structure
+## Writing a blueprint
 
-```
-my-blueprint/
-  blueprint.json        — project configuration
-  vite.config.ts        — Vite config (uses @leandown/blueprint/vite)
-  index.html            — Vite entry point
-  src/
-    main.ts             — JS entry (imports .md files)
-    style.css           — blueprint styles
-    index.md            — main blueprint content
-    chapters/           — additional chapter files
-  lean/                 — Lean 4 project (optional)
-  dist/                 — production output (after build)
+`main.typ` lists the chapters; each becomes a page:
+
+```typst
+#import "/.blueprint/lib.typ": *
+#show: blueprint.with(title: "My Blueprint")
+
+#chapter("index.html", title: [Introduction], include "chapters/intro.typ")
+#chapter("groups.html", title: [Groups], include "chapters/groups.typ")
 ```
 
-## Blueprint Markdown
+Chapters use the node functions:
 
-Write mathematical exposition with labeled nodes connected to Lean code:
+```typst
+#import "/.blueprint/lib.typ": *
 
-```markdown
-:::definition "add_def" (lean := "Nat.add")
-We write $`a + b` for the result of adding $`b` to $`a`.
-:::
+#definition("add_def", lean: "Nat.add")[
+  We write $a + b$ for the result of adding $b$ to $a$.
+]
 
-:::theorem "add_zero" (lean := "Nat.add_zero") (uses := "add_def")
-For every natural number $`n`, $`n + 0 = n`.
-:::
+#theorem("add_zero", lean: "Nat.add_zero", uses: ("add_def",))[
+  For every $n$, $n + 0 = n$.
+]
 
-```lean
-theorem add_zero_right (n : Nat) : n + 0 = n := by
-  simp
-```
+#proof[By induction, using @add_def.]
 ```
 
-### Directive Kinds
+- Kinds: `definition`, `theorem`, `lemma`, `proposition`, `corollary`,
+  `example`, `conjecture`, `remark`, `note`, and `proof`.
+- `lean:` takes fully qualified Lean names (a string, comma-separated, or an
+  array). `uses:` takes the labels this node depends on. `mathlib: true` marks
+  something already in mathlib.
+- Refer to any node with `@label`; it renders as "Theorem 2" and links to it,
+  on whatever page it lives.
+- ` ```lean ` code blocks are highlighted by the Lean server, with hovers.
 
-- `:::theorem` — theorem statement
-- `:::definition` — definition
-- `:::lemma` — lemma
-- `:::proof` — proof
-- `:::proposition` — proposition
-- `:::corollary` — corollary
-- `:::example` — example
-- `:::conjecture` — conjecture
-- `:::remark` — remark
-- `:::note` — note
+## Dependency graph
 
-### Attributes
+`graph.html` shows every node and its `uses` edges, coloured by checking each
+`lean:` name against Lean:
 
-- `(lean := "Name1, Name2")` — associate Lean declarations
-- `(uses := "label1, label2")` — declare dependencies on other nodes
-- `(owner := "name")` — assign an owner
-- `(priority := "high")` — set priority
-- `(mathlib)` — already in mathlib; counts as stated and fully proved
+- Border (statement): **stated** when every declaration exists; otherwise
+  **ready to state** if every dependency is stated, else **not ready**.
+- Fill (proof): **fully proved** (no `sorry` anywhere below, dependencies
+  fully proved), **proved** (no `sorry` below), **proved, sorry below** (its
+  own proof is done but something it uses has `sorry`), **ready to prove** (its
+  proof has `sorry`, every dependency's proof is done), **in progress**.
 
-Lean names in `lean :=` must be fully qualified (`Ns.foo`, not `foo`).
+Blueprint imports the root module of every `lean_lib` in your lakefile to
+check names; set `"leanImports"` in `blueprint.json` to import something else.
 
-### Dependency graph
+## blueprint.json
 
-`/graph` shows every labelled node and its `uses` edges. When
-`leanProjectPath` points at a Lean project, each node is coloured by
-leanblueprint's status model, checked against Lean itself:
+```json
+{
+  "name": "my-blueprint",
+  "leanProjectPath": "./lean",
+  "entry": "main.typ",
+  "outDir": "dist"
+}
+```
 
-- Border (statement): **Stated** when every `lean :=` declaration exists;
-  otherwise **Ready to state** if every dependency is stated, else **Not
-  ready**.
-- Fill (proof), for stated nodes:
-  - **Fully proved**: no `sorry` anywhere below it, and every dependency is
-    fully proved.
-  - **Proved**: no `sorry` anywhere below it, but some dependency isn't fully
-    proved yet.
-  - **Proved, sorry below**: its own proof is done, but something it uses in
-    Lean still has `sorry`.
-  - **Ready to prove**: its proof has `sorry`, and every dependency's proof is
-    done.
-  - **In progress**: its proof has `sorry`, and some dependency's proof isn't
-    done yet.
+## Commands
 
-"Its own proof" includes auxiliary declarations Lean splits off from it
-(like `foo.proof_1`), so a `sorry` inside a `have` counts.
+- `blueprint init [dir]` — scaffold a project.
+- `blueprint serve [--port N] [--host H]` — build, serve with live reload, and
+  rebuild when `.typ` or `.lean` files change.
+- `blueprint build` — build the static site (and copy doc-gen4 output to
+  `dist/docs/` when available, for the L∃∀N links).
+- `blueprint docs` — run `lake build :docs`.
 
-To check names, blueprint imports the root module of every `lean_lib` in your
-lakefile. Set `"leanImports": ["MyLib.Foo", …]` in `blueprint.json` to import
-something else. `blueprint build` waits for the check. `blueprint serve` runs
-it in the background, re-runs it when `.lean` files change, and reloads the
-graph page when it's done. If the check fails (for example, a module doesn't
-compile), the graph falls back to colouring nodes by kind and prints Lean's
-error.
+## How it works
 
-## CLI Commands
-
-### `blueprint init [dir]`
-
-Create a new blueprint project in `dir` (or `--dir <path>`), defaulting to the
-current directory.
-
-### `blueprint build`
-
-Build the blueprint for production. Runs `vite build` — Vite handles
-the entire pipeline: markdown → HTML, assets, bundling.
-
-### `blueprint serve`
-
-Start the Vite dev server with HMR. Edit `.md` files and the browser
-reloads instantly. Lean code blocks are highlighted via the Lean LSP.
-
-## Architecture
-
-The CLI is a thin wrapper around Vite. A custom Vite plugin (`@leandown/blueprint/vite`)
-transforms `.md` files through the blueprint pipeline:
-
-1. Pre-process `:::directive` containers → HTML sections
-2. `remark-parse` → mdast
-3. `@leandown/remark` → highlight Lean code blocks via LSP
-4. `remark-html` → serialize to HTML
-
-## Dependencies
-
-- [Vite](https://vitejs.dev/) — build pipeline + dev server
-- [cmd-ts](https://github.com/schnittstabil/cmd-ts) — CLI framework
-- [@leandown/core](../core/) — Lean 4 code highlighting engine
-- [@leandown/remark](../remark/) — remark plugin for Lean blocks
-- [remark](https://remark.js.org/) / [unified](https://unifiedjs.com/) — markdown processing
+The CLI copies its Typst library to `.blueprint/lib.typ` and compiles the
+project twice. The first pass reports the Lean blocks and nodes; leandown
+highlights the blocks and checks the declarations, and writes the results to
+`.blueprint/data.json`, which the second pass renders.

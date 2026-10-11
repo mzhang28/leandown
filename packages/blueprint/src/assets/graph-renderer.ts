@@ -250,7 +250,7 @@ export function renderGraph(
         },
       },
       {
-        selector: "node:hover",
+        selector: "node.hovered",
         style: { "border-width": 3, "border-color": "#222" },
       },
       {
@@ -299,18 +299,24 @@ export function renderGraph(
   cy.one("layoutstop", () => {
     (cy.nodes() as any).show(); // cola may hide nodes during layout
     cy.fit(undefined, 30);
+    // A small graph would otherwise be blown up to fill the page.
+    if (cy.zoom() > 1.5) {
+      cy.zoom(1.5);
+      cy.center();
+    }
   });
 
   cy.on("mouseover", "node", (e) => {
     container.style.cursor = "pointer";
     const node = e.target;
+    node.addClass("hovered");
     cy.elements().not(node).not(node.connectedEdges()).addClass("faded");
     node.connectedEdges().addClass("highlighted");
   });
 
   cy.on("mouseout", "node", () => {
     container.style.cursor = "default";
-    cy.elements().removeClass("faded highlighted");
+    cy.elements().removeClass("faded highlighted hovered");
   });
 
   if (onNavigate) {

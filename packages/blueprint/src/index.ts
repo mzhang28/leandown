@@ -45,7 +45,7 @@ const init = command({
 const build = command({
   name: "build",
   args: {},
-  description: "Build the blueprint for production (runs vite build)",
+  description: "Build the blueprint into a static site",
   handler: async () => {
     await buildCommand();
   },
@@ -54,18 +54,14 @@ const build = command({
 const serve = command({
   name: "serve",
   args: {
-    port: option({ type: optional(string), long: "port", short: "p", description: "Port to listen on" }),
+    port: option({ type: optional(string), long: "port", short: "p", description: "Port to listen on (default 5173)" }),
     host: option({ type: optional(string), long: "host", description: "Hostname to listen on" }),
-    open: flag({ long: "open", description: "Open browser on start" }),
-    strictPort: flag({ long: "strictPort", description: "Exit if port is already in use" }),
   },
-  description: "Start the Vite dev server with HMR and live reload",
+  description: "Build, serve, and rebuild on changes with live reload",
   handler: async (args) => {
     await serveCommand({
       port: args.port ? parseInt(args.port, 10) : undefined,
       host: args.host,
-      open: args.open || undefined,
-      strictPort: args.strictPort || undefined,
     });
   },
 });
@@ -96,7 +92,7 @@ const versionCmd = command({
 const blueprint = subcommands({
   name: "blueprint",
   description:
-    "All-in-one CLI for managing Lean blueprint projects — markdown-based mathematical documents with Lean formalization tracking",
+    "All-in-one CLI for Lean blueprint projects — Typst documents with Lean formalization tracking",
   cmds: {
     init,
     build,
