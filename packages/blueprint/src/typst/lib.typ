@@ -20,6 +20,21 @@
   note: "Note",
 )
 
+#let _short = (
+  definition: "Def.",
+  theorem: "Thm.",
+  lemma: "Lem.",
+  proposition: "Prop.",
+  corollary: "Cor.",
+  example: "Ex.",
+  conjecture: "Conj.",
+  remark: "Rem.",
+  note: "Note",
+)
+
+// How many dependencies the collapsed "uses" line names before "+N".
+#let _uses-preview = 2
+
 // Accepts `"a, b"` or `("a", "b")`.
 #let _list(v) = if v == none { () } else if type(v) == str {
   v.split(",").map(str.trim).filter(s => s != "")
@@ -28,6 +43,39 @@
 // Rebuilds an element tree that the CLI produced from leandown's HTML output.
 #let _render(n) = if type(n) == str { n } else {
   html.elem(n.tag, attrs: n.attrs, n.children.map(_render).join())
+}
+
+// The kind and number of the node labelled `name`, or none if there isn't one.
+#let _lookup(name) = {
+  let nodes = query(selector(<bp-node>)).filter(m => m.value.label == name)
+  if nodes.len() == 0 { return none }
+  let figs = query(label(name))
+  let number = if figs.len() > 0 {
+    counter(figure.where(kind: "blueprint")).at(figs.first().location()).first()
+  }
+  (kind: nodes.first().value.kind, number: number)
+}
+
+// "uses Def. 7, Thm. 6 +1"; click to expand into links to every dependency.
+#let _uses(uses) = context {
+  let found = uses.map(u => (name: u, node: _lookup(u)))
+  let brief = found.slice(0, calc.min(_uses-preview, found.len())).map(f =>
+    if f.node == none { f.name + "?" } else { _short.at(f.node.kind) + " " + str(f.node.number) })
+  let more = found.len() - brief.len()
+  html.elem("details", attrs: (class: "blueprint-uses"))[
+    #html.elem("summary", attrs: (class: "blueprint-chip blueprint-chip--uses"))[
+      uses #brief.join(", ")#if more > 0 [ +#more]
+    ]
+    #html.elem("ul", attrs: (class: "blueprint-uses-list"), found.map(f =>
+      html.elem("li", if f.node == none {
+        html.elem("span", attrs: (class: "blueprint-uses-missing"))[#f.name (not found)]
+      } else {
+        link(label(f.name))[
+          #_kinds.at(f.node.kind) #f.node.number
+          #html.elem("span", attrs: (class: "blueprint-label"), f.name)
+        ]
+      })).join())
+  ]
 }
 
 #let _node(kind, name, lean: none, uses: (), mathlib: false, body) = {
@@ -49,10 +97,7 @@
     ))[L∃∀N])
   }
   if uses.len() > 0 {
-    chips.push(html.elem("span", attrs: (
-      class: "blueprint-chip blueprint-chip--uses",
-      title: "Uses: " + uses.join(", "),
-    ))[uses])
+    chips.push(_uses(uses))
   }
   [#metadata((kind: kind, label: name, lean: decls, uses: uses, mathlib: mathlib)) <bp-node>]
   [#figure(

@@ -56,6 +56,8 @@ Chapters use the node functions:
   something already in mathlib.
 - Refer to any node with `@label`; it renders as "Theorem 2" and links to it,
   on whatever page it lives.
+- A node's header lists what it uses, abbreviated ("uses Def. 7, Thm. 6 +1");
+  click it for links to every dependency.
 - ` ```lean ` code blocks are highlighted by the Lean server, with hovers.
 
 ## Dependency graph
