@@ -34,6 +34,9 @@ setups. **Low** means an edge case or a hardening item.
 - **X11** (stderr never drained, concurrent `highlight()` on a fresh client):
   fixed.
 - **P1** (stale `bun.lock`): fixed.
+- **V3** (predictable `/tmp` project in the VS Code extension): fixed. The
+  fallback project is now a private `mkdtemp` directory per session, removed
+  on deactivate.
 - **X6** (cache hits still start Lean): fixed; servers now start lazily on the
   first cache miss. The rest of X6 is still open.
 
@@ -65,8 +68,8 @@ The most important problems, in order:
    so `bun install --frozen-lockfile` fails. **(verified)**~~ **Fixed** (`6e67a85`)
 8. **`blueprint build` exits 1 on a fresh `init` project** (B3), because
    `docsCommand` calls `process.exit` inside a `try`.
-9. **The VS Code extension uses a predictable `/tmp` project** (V3). Another
-   local user can plant a `lakefile.lean` that runs as you.
+9. ~~**The VS Code extension uses a predictable `/tmp` project** (V3). Another
+   local user can plant a `lakefile.lean` that runs as you.~~ **Fixed** (`f1b8c32`)
 
 ---
 
@@ -490,7 +493,7 @@ fallback before workspace folders exist, and later syncs then edit
 the stale companion.
 **Fix:** resolve the path once, or migrate the state when the path changes.
 
-### V3. Fixed, predictable `/tmp/leandown-temp-project` `[Medium, security]`
+### ~~V3. Fixed, predictable `/tmp/leandown-temp-project` `[Medium, security]`~~ Fixed in `f1b8c32`
 `packages/vscode/src/extension.ts:432-462`
 The directory is reused if it exists, and the lakefile is written only if it
 is absent. Another local user can pre-create the directory with a malicious
