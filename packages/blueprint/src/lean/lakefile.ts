@@ -6,7 +6,7 @@ import path from "node:path";
  *
  * Handles the subset we need:
  *   - top-level keys: name, defaultTargets
- *   - [[lean_lib]] / [[lean_exe]] array-of-tables with name, root
+ *   - [[lean_lib]] / [[lean_exe]] array-of-tables with name, root(s)
  *
  * Does NOT support: inline tables, dotted keys, heterogenous arrays,
  * triple-quoted strings, or date/time types.
@@ -21,6 +21,8 @@ export interface LakeConfig {
 
 export interface LakeLib {
   name: string;
+  /** Root modules, when set explicitly; Lake's default is `[name]`. */
+  roots?: string[];
 }
 
 export interface LakeExe {
@@ -106,7 +108,10 @@ function flushTable(
   table: { type: "lib" | "exe"; data: Record<string, string> }
 ): void {
   if (table.type === "lib") {
-    config.libs.push({ name: table.data.name ?? "unnamed" });
+    const lib: LakeLib = { name: table.data.name ?? "unnamed" };
+    const roots = table.data.roots;
+    if (roots) lib.roots = roots.startsWith("[") ? parseTomlArray(roots) : [roots];
+    config.libs.push(lib);
   } else {
     config.exes.push({
       name: table.data.name ?? "unnamed",

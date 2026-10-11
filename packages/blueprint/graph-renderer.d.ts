@@ -4,6 +4,13 @@ export interface GraphNode {
   kind: string;
   lean?: string;
   route: string;
+  mathlib?: boolean;
+  stated?: boolean;
+  proved?: boolean;
+  fullyProved?: boolean;
+  /** Absent when Lean status isn't available. */
+  statement?: "mathlib" | "stated" | "can_state" | "not_ready";
+  proof?: "fully_proved" | "proved" | "can_prove";
 }
 
 export interface GraphEdge {

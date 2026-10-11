@@ -1,10 +1,12 @@
-import type { Plugin as VitePlugin } from "vite";
+import type { Plugin as VitePlugin, ViteDevServer } from "vite";
 import { remark } from "remark";
 import remarkHtml from "remark-html";
 import remarkLean from "@leandown/remark";
 import { processDirectives, scanDirectives } from "../plugin/index.ts";
 import { findProjectRoot, readConfigIfExists } from "../util.ts";
 import { parseSummary } from "./summary.ts";
+import { computeStatuses, probeDeclarations } from "../lean/analyzer.ts";
+import type { DeclFacts } from "../lean/analyzer.ts";
 import path from "node:path";
 import fs from "node:fs";
 
@@ -12,12 +14,25 @@ const SUMMARY_MODULE = "@leandown/blueprint/summary";
 const RESOLVED_SUMMARY_MODULE = "\0blueprint-summary";
 const GRAPH_MODULE = "@leandown/blueprint/graph";
 const RESOLVED_GRAPH_MODULE = "\0blueprint-graph";
+/** Sent to the browser when fresh Lean status is available for the graph. */
+const GRAPH_STATUS_EVENT = "blueprint:graph-status";
+
+interface GraphNodeData {
+  id: string;
+  label: string;
+  kind: string;
+  lean?: string;
+  route: string;
+  mathlib: boolean;
+  leanDecls: string[];
+  uses: string[];
+}
 
 function extractGraphData(
   srcDir: string,
   watch: (file: string) => void = () => {},
-): { nodes: any[]; edges: any[] } {
-  const nodes: any[] = [];
+): { nodes: GraphNodeData[]; edges: any[] } {
+  const nodes: GraphNodeData[] = [];
   const edges: any[] = [];
   if (!fs.existsSync(srcDir)) return { nodes, edges };
 
@@ -51,18 +66,16 @@ function extractGraphData(
         continue;
       }
       seen.set(label, where);
-      const stated = !!attrs.lean;
-      const proved = stated && (attrs.proved !== undefined);
-      const mathlib = attrs.mathlib !== undefined;
-
+      const split = (v?: string) => (v ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+      const uses = split(attrs.uses);
       nodes.push({
         id: label, label, kind, lean: attrs.lean, route,
-        stated, proved, mathlib,
+        mathlib: attrs.mathlib !== undefined,
+        leanDecls: split(attrs.lean),
+        uses,
       });
-      if (attrs.uses) {
-        for (const dep of attrs.uses.split(",").map((s: string) => s.trim()).filter(Boolean)) {
-          edges.push({ source: dep, target: label, where });
-        }
+      for (const dep of uses) {
+        edges.push({ source: dep, target: label, where });
       }
     }
   }
@@ -78,26 +91,44 @@ function extractGraphData(
     }
   }
 
-  // Compute fullyProved: node and all its ancestors are proved.
-  const provedSet = new Set(nodes.filter((n) => n.proved || n.mathlib).map((n) => n.id));
-  const adjacency = new Map<string, string[]>();
-  for (const e of edges) {
-    const deps = adjacency.get(e.target) ?? [];
-    deps.push(e.source);
-    adjacency.set(e.target, deps);
-  }
-  function allAncestorsProved(id: string, visited = new Set<string>()): boolean {
-    if (visited.has(id)) return true;
-    visited.add(id);
-    const deps = adjacency.get(id);
-    if (!deps || deps.length === 0) return provedSet.has(id);
-    return provedSet.has(id) && deps.every((d) => allAncestorsProved(d, visited));
-  }
-  for (const node of nodes) {
-    node.fullyProved = allAncestorsProved(node.id);
-  }
-
   return { nodes, edges };
+}
+
+/**
+ * Serialize the graph module. Lean status fields are added only when `facts`
+ * is available; without them the renderer falls back to kind colours.
+ */
+function graphModuleCode(
+  graph: { nodes: GraphNodeData[]; edges: any[] },
+  facts: Map<string, DeclFacts> | undefined,
+  warn: (msg: string) => void,
+): string {
+  const statuses = facts
+    ? computeStatuses(
+        graph.nodes.map((n) => ({ label: n.id, leanDecls: n.leanDecls, uses: n.uses, mathlib: n.mathlib })),
+        facts,
+        (cycle) => warn(`dependency cycle: ${[...cycle, cycle[0]].join(" → ")}`),
+      )
+    : undefined;
+  const nodes = graph.nodes.map(({ leanDecls, uses, ...n }) => {
+    if (facts) {
+      for (const d of leanDecls) {
+        if (facts.get(d)?.exists === false) {
+          warn(`"${n.id}" links to Lean declaration '${d}', which wasn't found (is it fully qualified, and imported by a library root?)`);
+        }
+      }
+    }
+    return { ...n, ...statuses?.get(n.id) };
+  });
+  return `export const nodes = ${JSON.stringify(nodes)};
+export const edges = ${JSON.stringify(graph.edges)};
+if (import.meta.hot) {
+  import.meta.hot.on(${JSON.stringify(GRAPH_STATUS_EVENT)}, () => {
+    const p = location.pathname;
+    if (p.endsWith("/graph") || p.endsWith("/graph/")) location.reload();
+  });
+}
+`;
 }
 
 export interface BlueprintVitePluginOptions {
@@ -127,7 +158,63 @@ export function blueprintVitePlugin(
   let resolvedLeanPath: string | undefined;
   let resolvedSrcDir: string | undefined;
   let resolvedOutDir: string | undefined;
+  let resolvedLeanImports: string[] | undefined;
   let resolvedBase = "/";
+  let isBuild = false;
+  let devServer: ViteDevServer | undefined;
+
+  // Lean status for the graph. A build waits for it; the dev server runs it
+  // in the background, and the graph page reloads when it lands. A probe is
+  // reused while the set of names and the Lean sources are unchanged.
+  interface Probe {
+    key: string;
+    facts?: Map<string, DeclFacts>;
+    done: Promise<void>;
+    warned: Set<string>;
+  }
+  let probe: Probe | undefined;
+  let leanGeneration = 0;
+  let lastLeanNames: string[] = [];
+
+  const hasLeanProject = () =>
+    !!resolvedLeanPath &&
+    (fs.existsSync(path.join(resolvedLeanPath, "lakefile.toml")) ||
+      fs.existsSync(path.join(resolvedLeanPath, "lakefile.lean")));
+
+  function invalidateGraph(): void {
+    const mod = devServer?.moduleGraph.getModuleById(RESOLVED_GRAPH_MODULE);
+    if (mod) devServer!.moduleGraph.invalidateModule(mod);
+  }
+
+  function ensureProbe(names: string[]): Probe {
+    lastLeanNames = names;
+    const key = `${leanGeneration}\n${[...new Set(names)].sort().join("\n")}`;
+    if (probe?.key === key) return probe;
+    // Keep showing the previous result until the new one lands.
+    const entry: Probe = { key, facts: probe?.facts, done: Promise.resolve(), warned: new Set() };
+    probe = entry;
+    if (devServer) console.log("[blueprint] checking Lean declarations for the graph...");
+    entry.done = probeDeclarations(names, {
+      leanProjectPath: resolvedLeanPath!,
+      imports: resolvedLeanImports,
+    }).then(
+      ({ facts, invalid }) => {
+        if (probe !== entry) return;
+        for (const n of invalid) console.warn(`[blueprint] '${n}' is not a valid Lean name`);
+        entry.facts = facts;
+        if (devServer) {
+          console.log("[blueprint] Lean status ready");
+          invalidateGraph();
+          devServer.ws.send({ type: "custom", event: GRAPH_STATUS_EVENT });
+        }
+      },
+      (err) => {
+        if (probe !== entry) return;
+        console.warn(`[blueprint] Lean status unavailable; the graph shows kinds only. ${(err as Error).message}`);
+      },
+    );
+    return entry;
+  }
 
   return {
     name: "leandown-blueprint",
@@ -156,6 +243,10 @@ export function blueprintVitePlugin(
             "@leandown/blueprint/graph-renderer",
           ],
         },
+        server: {
+          // Lake's build tree (and Mathlib under it) is huge and irrelevant.
+          watch: { ignored: ["**/.lake/**"] },
+        },
       };
     },
 
@@ -164,7 +255,7 @@ export function blueprintVitePlugin(
       if (id === RESOLVED_GRAPH_MODULE) return RESOLVED_GRAPH_MODULE;
     },
 
-    load(id: string) {
+    async load(id: string) {
       if (!resolvedRoot) {
         // Fallback: configResolved might not have fired yet
         resolvedRoot = findProjectRoot(process.cwd()) ?? process.cwd();
@@ -182,13 +273,24 @@ export function blueprintVitePlugin(
       }
 
       if (id === RESOLVED_GRAPH_MODULE) {
-        const { nodes, edges } = extractGraphData(srcDir, (f) => this.addWatchFile(f));
-        return `export const nodes = ${JSON.stringify(nodes)};\nexport const edges = ${JSON.stringify(edges)};`;
+        const graph = extractGraphData(srcDir, (f) => this.addWatchFile(f));
+        let current: Probe | undefined;
+        if (hasLeanProject()) {
+          current = ensureProbe(graph.nodes.flatMap((n) => n.leanDecls));
+          if (isBuild) await current.done;
+        }
+        const warn = (msg: string) => {
+          if (current?.warned.has(msg)) return;
+          current?.warned.add(msg);
+          console.warn(`[blueprint] ${msg}`);
+        };
+        return graphModuleCode(graph, current?.facts, warn);
       }
     },
 
     configResolved(config) {
       resolvedBase = config.base ?? "/";
+      isBuild = config.command === "build";
 
       if (options.projectRoot) {
         resolvedRoot = options.projectRoot;
@@ -205,10 +307,28 @@ export function blueprintVitePlugin(
       } else if (cfg?.leanProjectPath) {
         resolvedLeanPath = path.resolve(resolvedRoot, cfg.leanProjectPath);
       }
+      resolvedLeanImports = cfg?.leanImports;
     },
 
     configureServer(server) {
+      devServer = server;
       if (!resolvedLeanPath) return;
+
+      // Re-check Lean status when Lean sources change.
+      const leanRoot = resolvedLeanPath;
+      const lakeDir = `${path.sep}.lake${path.sep}`;
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      server.watcher.add(leanRoot);
+      server.watcher.on("all", (_event, file) => {
+        if (!file.endsWith(".lean") || file.includes(lakeDir)) return;
+        if (!file.startsWith(leanRoot + path.sep)) return;
+        clearTimeout(timer);
+        timer = setTimeout(() => {
+          leanGeneration++;
+          if (hasLeanProject()) ensureProbe(lastLeanNames);
+        }, 500);
+      });
+
       const docsDir = path.join(resolvedLeanPath, ".lake", "build", "doc");
       const MIME: Record<string, string> = {
         ".html": "text/html; charset=utf-8",

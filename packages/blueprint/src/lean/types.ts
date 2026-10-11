@@ -1,67 +1,45 @@
 /**
- * Formalization status of a blueprint node's linked Lean declaration.
- *
- * Mirrors the status model from verso-blueprint / leanblueprint:
- *   pending     — not yet linked to any Lean declaration
- *   not_ready   — linked, but the declaration (or a dependency) has `sorry`
- *   can_state   — all statement prerequisites are `sorry`-free
- *   can_prove   — all proof prerequisites are `sorry`-free
- *   proved      — the declaration itself has no `sorry`
- *   fully_proved — proved, and all transitive ancestors are proved too
+ * Statement status of a blueprint node, shown as the node's border colour.
+ * Mirrors leanblueprint:
+ *   mathlib    — marked `(mathlib)`: already in mathlib
+ *   stated     — every linked Lean declaration exists
+ *   can_state  — not stated, but every dependency is stated
+ *   not_ready  — not stated, and some dependency isn't either
  */
-export type DeclState =
-  | "pending"
-  | "not_ready"
-  | "can_state"
-  | "can_prove"
-  | "proved"
-  | "fully_proved";
+export type StatementState = "mathlib" | "stated" | "can_state" | "not_ready";
 
-/** A single blueprint node (theorem / definition / lemma / …). */
-export interface BlueprintNode {
-  /** Blueprint label, e.g. "add_zero" */
+/**
+ * Proof status of a blueprint node, shown as the node's fill colour.
+ *   fully_proved — proved, and every dependency is fully proved
+ *   proved       — stated, and no linked declaration depends on `sorry`
+ *   can_prove    — stated, and every dependency is proved
+ */
+export type ProofState = "fully_proved" | "proved" | "can_prove";
+
+/** What Lean reports about one declaration name. */
+export interface DeclFacts {
+  /** The name resolves to a constant in the project's environment. */
+  exists: boolean;
+  /** `#print axioms` lists `sorryAx`, i.e. it depends on `sorry` somewhere. */
+  usesSorry: boolean;
+}
+
+/** Input to status computation: one blueprint node. */
+export interface StatusInput {
   label: string;
-  /** Node kind */
-  kind: string;
-  /** Linked Lean declaration names */
+  /** Fully-qualified Lean declaration names from `(lean := "...")`. */
   leanDecls: string[];
-  /** Blueprint labels this node depends on (from `(uses := "...")`) */
+  /** Labels this node depends on, from `(uses := "...")`. */
   uses: string[];
-  /** Computed formalization status */
-  status: DeclState;
-  /** Whether this node was auto-linked from a @[blueprint "..."] annotation */
-  autoLinked: boolean;
-  /** Whether the node's own Lean declaration contains `sorry` */
-  hasOwnSorry: boolean;
+  /** Marked `(mathlib)`. */
+  mathlib?: boolean;
 }
 
-/** A directed edge in the dependency graph. */
-export interface BlueprintEdge {
-  from: string;
-  to: string;
-  intent?: "regular" | "technical" | "auxiliary";
-}
-
-/** The complete blueprint manifest — consumed by the frontend graph renderer. */
-export interface BlueprintManifest {
-  /** All nodes keyed by label. */
-  nodes: Record<string, BlueprintNode>;
-  /** Dependency edges between nodes. */
-  edges: BlueprintEdge[];
-}
-
-/** Raw per-declaration data extracted from Lean source files. */
-export interface LeanDeclInfo {
-  /** Fully-qualified Lean name, e.g. "Nat.add_comm" */
-  name: string;
-  /** Source file path (absolute) */
-  filePath: string;
-  /** Line in the source file (0-based) */
-  line: number;
-  /** Whether the declaration body contains `sorry` */
-  hasSorry: boolean;
-  /** Blueprint labels this declaration is tagged with via @[blueprint "..."] */
-  blueprintLabels: string[];
-  /** Lean names this declaration references (direct dependencies) */
-  references: string[];
+/** Computed status of one blueprint node. */
+export interface NodeStatus {
+  stated: boolean;
+  proved: boolean;
+  fullyProved: boolean;
+  statement: StatementState;
+  proof?: ProofState;
 }

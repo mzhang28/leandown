@@ -62,6 +62,12 @@ export interface LeanLSPClientOptions {
   command?: [string, ...string[]];
 }
 
+export interface LeanElaborateResult {
+  diagnostics: { line: number; severity: number; message: string }[];
+  /** False when the timeout elapsed before `$/lean/fileProgress` reported completion. */
+  compileComplete: boolean;
+}
+
 export interface LeanHighlightResult {
   html: string;
   /** False when highlighting ran before `$/lean/fileProgress` reported completion. */
@@ -250,25 +256,7 @@ export class LeanLSPClient {
     });
 
     try {
-    let compileComplete = false;
-    // Wait for `$/lean/fileProgress` completion, or fall back to a timeout.
-    // Both the waiter map entry and the timer are cleaned up once settled so
-    // neither leaks (the timer would otherwise keep the event loop alive).
-    await new Promise<void>((resolve) => {
-      let settled = false;
-      const done = () => {
-        if (settled) return;
-        settled = true;
-        clearTimeout(timer);
-        this.compileWaiters.delete(tempFileUri);
-        resolve();
-      };
-      const timer = setTimeout(done, COMPILE_TIMEOUT_MS);
-      this.compileWaiters.set(tempFileUri, () => {
-        compileComplete = true;
-        done();
-      });
-    });
+    const compileComplete = await this.waitForCompile(tempFileUri, COMPILE_TIMEOUT_MS);
 
     const tokensRes = await this.sendRequest(
       "textDocument/semanticTokens/full",
@@ -722,19 +710,79 @@ export class LeanLSPClient {
 
     return { html: codeHtml, compileComplete };
     } finally {
-      // Always tell the server to close the document and drop per-URI state,
-      // even if a request rejected partway through — otherwise the document
-      // stays open server-side and diagnosticsMap/compileWaiters entries leak.
-      try {
-        this.sendNotification("textDocument/didClose", {
-          textDocument: { uri: tempFileUri },
-        });
-      } catch {
-        // process may have already exited; nothing more to clean up on the wire
-      }
-      this.diagnosticsMap.delete(tempFileUri);
-      this.compileWaiters.delete(tempFileUri);
+      this.closeDocument(tempFileUri);
     }
+  }
+
+  /**
+   * Elaborate `content` as a standalone file in the project and return the
+   * raw LSP diagnostics (errors, warnings and command output such as
+   * `#print axioms`). Lines are 0-based, relative to `content`.
+   */
+  async elaborate(
+    content: string,
+    options: { timeoutMs?: number } = {}
+  ): Promise<LeanElaborateResult> {
+    await this.start();
+    const fileId = Math.random().toString(36).substring(7);
+    const tempFilePath = path.join(this.projectPath, `__temp_lean_elaborate_${fileId}__.lean`);
+    const tempFileUri = pathToFileURL(tempFilePath).href;
+    this.sendNotification("textDocument/didOpen", {
+      textDocument: { uri: tempFileUri, languageId: "lean", version: 1, text: content },
+    });
+    try {
+      const compileComplete = await this.waitForCompile(
+        tempFileUri,
+        options.timeoutMs ?? COMPILE_TIMEOUT_MS
+      );
+      if (this.exitError) throw this.exitError;
+      const diagnostics = (this.diagnosticsMap.get(tempFileUri) ?? []).map((d) => ({
+        line: d.range.start.line as number,
+        severity: d.severity as number,
+        message: String(d.message),
+      }));
+      return { diagnostics, compileComplete };
+    } finally {
+      this.closeDocument(tempFileUri);
+    }
+  }
+
+  /**
+   * Wait for `$/lean/fileProgress` to report completion for `uri`, or for
+   * the timeout. Resolves true on completion. Both the waiter map entry and
+   * the timer are cleaned up once settled so neither leaks (the timer would
+   * otherwise keep the event loop alive).
+   */
+  private waitForCompile(uri: string, timeoutMs: number): Promise<boolean> {
+    return new Promise<boolean>((resolve) => {
+      let settled = false;
+      const done = (complete: boolean) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        this.compileWaiters.delete(uri);
+        resolve(complete);
+      };
+      const timer = setTimeout(() => done(false), timeoutMs);
+      this.compileWaiters.set(uri, () => done(true));
+    });
+  }
+
+  /**
+   * Close a temp document and drop its per-URI state. Always called, even if
+   * a request rejected partway through — otherwise the document stays open
+   * server-side and diagnosticsMap/compileWaiters entries leak.
+   */
+  private closeDocument(uri: string): void {
+    try {
+      this.sendNotification("textDocument/didClose", {
+        textDocument: { uri },
+      });
+    } catch {
+      // process may have already exited; nothing more to clean up on the wire
+    }
+    this.diagnosticsMap.delete(uri);
+    this.compileWaiters.delete(uri);
   }
 
   async shutdown(): Promise<void> {

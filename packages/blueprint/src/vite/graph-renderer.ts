@@ -1,6 +1,7 @@
 import cytoscape from "cytoscape";
 // @ts-ignore
 import cola from "cytoscape-cola";
+import type { ProofState, StatementState } from "../lean/types.ts";
 
 cytoscape.use(cola);
 
@@ -10,14 +11,18 @@ export interface GraphNode {
   kind: string;
   lean?: string;
   route: string;
-  /** Statement is formalized (has a Lean declaration). */
-  stated?: boolean;
-  /** Proof is formalized (no `sorry`). */
-  proved?: boolean;
   /** Already in mathlib. */
   mathlib?: boolean;
-  /** Fully formalized — proved and all ancestors are proved. */
+  /** Every linked Lean declaration exists (checked against Lean). */
+  stated?: boolean;
+  /** Stated, and no linked declaration depends on `sorry`. */
+  proved?: boolean;
+  /** Proved, and every dependency is fully proved. */
   fullyProved?: boolean;
+  /** Border colour. Absent when Lean status isn't available. */
+  statement?: StatementState;
+  /** Fill colour. Absent when there's nothing to show. */
+  proof?: ProofState;
 }
 
 export interface GraphEdge {
@@ -39,7 +44,7 @@ const STATEMENT_COLORS: Record<string, { color: string; label: string; desc: str
 const PROOF_COLORS: Record<string, { color: string; label: string; desc: string }> = {
   fully_proved: { color: "#1CAC78", label: "Fully proved",  desc: "proof and all ancestors are formalized" },
   proved:       { color: "#9CEC8B", label: "Proved",        desc: "proof is formalized" },
-  can_prove:    { color: "#A3D6FF", label: "Ready to prove", desc: "all proof prerequisites are formalized" },
+  can_prove:    { color: "#A3D6FF", label: "Ready to prove", desc: "statement is formalized and all prerequisites are proved" },
 };
 
 /** Kind → fallback colour (used when no state data is available). */
@@ -65,23 +70,16 @@ const KIND_LABELS: Record<string, string> = {
 // ── Node colouring ─────────────────────────────────────────────────────────
 
 function resolveStatementColor(node: GraphNode): string | undefined {
-  if (node.mathlib) return STATEMENT_COLORS.mathlib!.color;
-  if (node.stated)  return STATEMENT_COLORS.stated!.color;
-  if (node.fullyProved || node.proved) return STATEMENT_COLORS.can_state!.color;
-  return undefined; // no state → fall back to kind colour
+  return node.statement ? STATEMENT_COLORS[node.statement]?.color : undefined;
 }
 
 function resolveProofColor(node: GraphNode): string | undefined {
-  if (node.fullyProved) return PROOF_COLORS.fully_proved!.color;
-  if (node.proved)      return PROOF_COLORS.proved!.color;
-  // `can_prove` when stated but not yet proved (optimistic: all deps ready)
-  if (node.stated && !node.proved) return PROOF_COLORS.can_prove!.color;
-  return undefined;
+  return node.proof ? PROOF_COLORS[node.proof]?.color : undefined;
 }
 
-/** True when at least one node carries state data. */
+/** True when Lean status is available; otherwise nodes use kind colours. */
 function hasStateData(nodes: GraphNode[]): boolean {
-  return nodes.some((n) => n.mathlib || n.stated || n.proved || n.fullyProved);
+  return nodes.some((n) => n.statement);
 }
 
 // ── Legend ──────────────────────────────────────────────────────────────────
@@ -204,8 +202,7 @@ export function renderGraph(
         data: {
           id: n.id, label: n.label, kind: n.kind,
           lean: n.lean ?? "", route: n.route,
-          stated: n.stated ?? false, proved: n.proved ?? false,
-          mathlib: n.mathlib ?? false, fullyProved: n.fullyProved ?? false,
+          statement: n.statement, proof: n.proof,
         },
       })),
       ...edges
@@ -225,21 +222,21 @@ export function renderGraph(
           "shape": "round-rectangle",
           "background-color": (ele: cytoscape.NodeSingular) => {
             const n = ele.data();
-            if (n.mathlib || n.stated || n.proved || n.fullyProved) {
+            if (n.statement) {
               return resolveProofColor(n as any) ?? "#fff";
             }
             return KIND_COLORS[n.kind]?.bg ?? "#f6f6f6";
           },
           "border-color": (ele: cytoscape.NodeSingular) => {
             const n = ele.data();
-            if (n.mathlib || n.stated || n.proved || n.fullyProved) {
+            if (n.statement) {
               return resolveStatementColor(n as any) ?? "#aaa";
             }
             return KIND_COLORS[n.kind]?.border ?? "#aaa";
           },
           "border-width": (ele: cytoscape.NodeSingular) => {
             const n = ele.data();
-            return (n.mathlib || n.stated) ? 3 : 2;
+            return (n.statement === "mathlib" || n.statement === "stated") ? 3 : 2;
           },
           "color": (ele: cytoscape.NodeSingular) => {
             return KIND_COLORS[ele.data("kind")]?.text ?? "#333";
@@ -285,7 +282,7 @@ export function renderGraph(
       padding: 30,
       edgeLength: 90,
       // Downward flow: edges prefer to point downward
-      flow: { axis: "x", minSeparation: 15 },
+      flow: { axis: "y", minSeparation: 15 },
       // Prevent disconnected components from drifting apart
       infinite: false,
     } as any,

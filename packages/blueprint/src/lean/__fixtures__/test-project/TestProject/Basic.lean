@@ -2,9 +2,15 @@
 
 def hello := "world"
 
-@[blueprint "add_def"]
 def NatAdd := Nat.add
 
-@[blueprint "add_zero"]
 theorem add_zero_right (n : Nat) : n + 0 = n := by
   simp
+
+namespace Demo
+
+abbrev double (n : Nat) : Nat := n + n
+
+theorem double_zero : double 0 = 0 := rfl
+
+end Demo

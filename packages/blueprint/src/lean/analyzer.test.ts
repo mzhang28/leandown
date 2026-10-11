@@ -1,243 +1,178 @@
-import { describe, test, expect, beforeAll } from "bun:test";
-import { analyzeProject } from "./analyzer.ts";
+import { describe, test, expect, beforeAll, afterAll } from "bun:test";
+import { computeStatuses, libraryRoots, probeDeclarations } from "./analyzer.ts";
+import type { DeclFacts, StatusInput } from "./types.ts";
 import path from "node:path";
 import fs from "node:fs";
+import os from "node:os";
 
 const FIXTURES = path.join(import.meta.dirname, "__fixtures__", "test-project");
 
-// Skip LSP for unit tests — static analysis only
-const USE_LSP = false;
+function facts(entries: Record<string, Partial<DeclFacts>>): Map<string, DeclFacts> {
+  return new Map(
+    Object.entries(entries).map(([k, v]) => [k, { exists: true, usesSorry: false, ...v }])
+  );
+}
 
-describe("analyzeProject (static analysis)", () => {
-  test("throws when no lakefile.toml exists", async () => {
-    await expect(
-      analyzeProject({
-        leanProjectPath: "/nonexistent",
-        useLsp: false,
-      })
-    ).rejects.toThrow("No lakefile.toml found");
+function node(label: string, leanDecls: string[] = [], uses: string[] = [], mathlib = false): StatusInput {
+  return { label, leanDecls, uses, mathlib };
+}
+
+describe("computeStatuses", () => {
+  test("proved leaf is fully proved", () => {
+    const s = computeStatuses([node("a", ["A"])], facts({ A: {} })).get("a")!;
+    expect(s).toEqual({ stated: true, proved: true, fullyProved: true, statement: "stated", proof: "fully_proved" });
   });
 
-  test("throws when no .lean files found", async () => {
-    const emptyDir = path.join(FIXTURES, "../tmp-empty");
-    fs.mkdirSync(emptyDir, { recursive: true });
-    fs.writeFileSync(
-      path.join(emptyDir, "lakefile.toml"),
-      'name = "Empty"\n'
+  test("sorry makes a node stated but not proved", () => {
+    const s = computeStatuses([node("a", ["A"])], facts({ A: { usesSorry: true } })).get("a")!;
+    expect(s.statement).toBe("stated");
+    expect(s.proof).toBe("can_prove");
+    expect(s.proved).toBe(false);
+  });
+
+  test("missing declaration is not stated", () => {
+    const s = computeStatuses([node("a", ["A", "B"])], facts({ A: {}, B: { exists: false } })).get("a")!;
+    expect(s.stated).toBe(false);
+    expect(s.statement).toBe("can_state");
+    expect(s.proof).toBeUndefined();
+  });
+
+  test("unlinked node: can_state iff all deps are stated", () => {
+    const f = facts({ A: {}, B: { exists: false } });
+    const st = computeStatuses(
+      [node("a", ["A"]), node("b", ["B"]), node("x", [], ["a"]), node("y", [], ["a", "b"])],
+      f
     );
+    expect(st.get("x")!.statement).toBe("can_state");
+    expect(st.get("y")!.statement).toBe("not_ready");
+    expect(st.get("x")!.proof).toBeUndefined();
+  });
+
+  test("can_prove needs every dependency proved", () => {
+    const f = facts({ A: {}, B: { usesSorry: true }, C: { usesSorry: true }, D: { usesSorry: true } });
+    const st = computeStatuses(
+      [node("a", ["A"]), node("b", ["B"]), node("c", ["C"], ["a"]), node("d", ["D"], ["b"])],
+      f
+    );
+    expect(st.get("c")!.proof).toBe("can_prove");
+    expect(st.get("d")!.proof).toBeUndefined();
+  });
+
+  test("proved node with an unproved dependency is proved, not fully", () => {
+    const st = computeStatuses(
+      [node("a", ["A"]), node("b", ["B"], ["a"])],
+      facts({ A: { usesSorry: true }, B: {} })
+    );
+    expect(st.get("b")!.proof).toBe("proved");
+    expect(st.get("b")!.fullyProved).toBe(false);
+  });
+
+  test("fully proved propagates through a chain", () => {
+    const st = computeStatuses(
+      [node("c", ["C"], ["b"]), node("b", ["B"], ["a"]), node("a", ["A"])],
+      facts({ A: {}, B: {}, C: {} })
+    );
+    expect([...st.values()].every((s) => s.proof === "fully_proved")).toBe(true);
+  });
+
+  test("mathlib nodes count as stated and proved without Lean", () => {
+    const st = computeStatuses([node("m", [], [], true), node("x", ["X"], ["m"])], facts({ X: {} }));
+    expect(st.get("m")!.statement).toBe("mathlib");
+    expect(st.get("x")!.proof).toBe("fully_proved");
+  });
+
+  test("a cycle is never fully proved and is reported", () => {
+    const cycles: string[][] = [];
+    const st = computeStatuses(
+      [node("a", ["A"], ["b"]), node("b", ["B"], ["a"])],
+      facts({ A: {}, B: {} }),
+      (c) => cycles.push(c)
+    );
+    expect(st.get("a")!.fullyProved).toBe(false);
+    expect(st.get("b")!.fullyProved).toBe(false);
+    expect(st.get("a")!.proof).toBe("proved");
+    expect(cycles).toEqual([["a", "b"]]);
+  });
+
+  test("unknown dependency labels are ignored", () => {
+    const s = computeStatuses([node("a", ["A"], ["ghost"])], facts({ A: {} })).get("a")!;
+    expect(s.proof).toBe("fully_proved");
+  });
+});
+
+describe("libraryRoots", () => {
+  test("reads lean_lib names from lakefile.toml", () => {
+    expect(libraryRoots(FIXTURES)).toEqual(["TestProject"]);
+  });
+
+  test("honours explicit roots and lakefile.lean", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "blueprint-roots-"));
     try {
-      await expect(
-        analyzeProject({
-          leanProjectPath: emptyDir,
-          useLsp: false,
-        })
-      ).rejects.toThrow("No .lean files found");
+      fs.writeFileSync(
+        path.join(dir, "lakefile.toml"),
+        'name = "X"\n[[lean_lib]]\nname = "A"\nroots = ["A.One", "A.Two"]\n[[lean_lib]]\nname = "B"\n'
+      );
+      expect(libraryRoots(dir)).toEqual(["A.One", "A.Two", "B"]);
+      fs.rmSync(path.join(dir, "lakefile.toml"));
+      fs.writeFileSync(
+        path.join(dir, "lakefile.lean"),
+        "import Lake\nopen Lake DSL\npackage x\nlean_lib «Foo» where\n  srcDir := \".\"\nlean_lib Bar\n"
+      );
+      expect(libraryRoots(dir)).toEqual(["Foo", "Bar"]);
     } finally {
-      fs.rmSync(emptyDir, { recursive: true, force: true });
+      fs.rmSync(dir, { recursive: true, force: true });
     }
   });
+});
 
-  test("discovers @[blueprint \"...\"] auto-linked declarations", async () => {
-    const manifest = await analyzeProject({
-      leanProjectPath: FIXTURES,
-      useLsp: USE_LSP,
-    });
+const lake = Bun.which("lake");
 
-    // Auto-linked from @[blueprint "..."] annotations
-    expect(manifest.nodes["add_def"]).toBeDefined();
-    expect(manifest.nodes["add_def"]!.leanDecls).toContain("NatAdd");
-    expect(manifest.nodes["add_def"]!.autoLinked).toBe(true);
-
-    expect(manifest.nodes["add_zero"]).toBeDefined();
-    expect(manifest.nodes["add_zero"]!.leanDecls).toContain("add_zero_right");
-    expect(manifest.nodes["add_zero"]!.autoLinked).toBe(true);
-
-    expect(manifest.nodes["add_succ"]).toBeDefined();
-    expect(manifest.nodes["add_succ"]!.leanDecls).toContain("add_succ_right");
-    expect(manifest.nodes["add_succ"]!.autoLinked).toBe(true);
+describe.skipIf(!lake)("probeDeclarations (real Lean)", () => {
+  let dir: string;
+  beforeAll(() => {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), "blueprint-probe-"));
+    fs.cpSync(FIXTURES, dir, { recursive: true });
+  });
+  afterAll(() => {
+    fs.rmSync(dir, { recursive: true, force: true });
   });
 
-  test("detects sorry in declarations", async () => {
-    const manifest = await analyzeProject({
-      leanProjectPath: FIXTURES,
-      useLsp: USE_LSP,
+  test("reports existence and sorry, including namespaces and indirect sorry", async () => {
+    const { facts, invalid } = await probeDeclarations(
+      [
+        "NatAdd",
+        "Demo.double",
+        "Demo.double_zero",
+        "double_zero",
+        "add_succ_right",
+        "add_succ_twice",
+        "Nat.add_zero",
+        "bad name",
+      ],
+      { leanProjectPath: dir }
+    );
+    expect(invalid).toEqual(["bad name"]);
+    expect(Object.fromEntries(facts)).toEqual({
+      NatAdd: { exists: true, usesSorry: false },
+      "Demo.double": { exists: true, usesSorry: false },
+      "Demo.double_zero": { exists: true, usesSorry: false },
+      double_zero: { exists: false, usesSorry: false },
+      add_succ_right: { exists: true, usesSorry: true },
+      add_succ_twice: { exists: true, usesSorry: true },
+      "Nat.add_zero": { exists: true, usesSorry: false },
     });
+  }, 300_000);
 
-    // add_zero_right has no sorry + no deps → fully_proved
-    expect(manifest.nodes["add_zero"]!.status).toBe("fully_proved");
-
-    // add_succ_right has sorry → not_ready
-    expect(manifest.nodes["add_succ"]!.status).toBe("not_ready");
-  });
-
-  test("cross-references blueprint labels with Lean declarations", async () => {
-    const blueprintLabels = new Map([
-      [
-        "my_add_def",
-        { kind: "definition", leanDecls: ["NatAdd"], uses: [] },
-      ],
-      [
-        "my_add_zero",
-        {
-          kind: "theorem",
-          leanDecls: ["add_zero_right"],
-          uses: ["my_add_def"],
-        },
-      ],
-      [
-        "my_add_succ",
-        {
-          kind: "theorem",
-          leanDecls: ["add_succ_right"],
-          uses: ["my_add_def"],
-        },
-      ],
-    ]);
-
-    const manifest = await analyzeProject({
-      leanProjectPath: FIXTURES,
-      blueprintLabels,
-      useLsp: USE_LSP,
-    });
-
-    // Markdown-defined nodes should take precedence
-    expect(manifest.nodes["my_add_def"]).toBeDefined();
-    expect(manifest.nodes["my_add_def"]!.leanDecls).toContain("NatAdd");
-    expect(manifest.nodes["my_add_def"]!.kind).toBe("definition");
-    expect(manifest.nodes["my_add_def"]!.autoLinked).toBe(false);
-
-    // add_zero_right → my_add_zero, no sorry, deps fully_proved → fully_proved
-    expect(manifest.nodes["my_add_zero"]!.status).toBe("fully_proved");
-
-    // add_succ_right → my_add_succ, has sorry → not_ready
-    expect(manifest.nodes["my_add_succ"]!.status).toBe("not_ready");
-  });
-
-  test("builds dependency edges from uses", async () => {
-    const blueprintLabels = new Map([
-      [
-        "A",
-        { kind: "theorem", leanDecls: ["add_zero_right"], uses: ["B"] },
-      ],
-      ["B", { kind: "definition", leanDecls: ["NatAdd"], uses: [] }],
-      [
-        "C",
-        {
-          kind: "theorem",
-          leanDecls: ["add_succ_right"],
-          uses: ["B", "A"],
-        },
-      ],
-    ]);
-
-    const manifest = await analyzeProject({
-      leanProjectPath: FIXTURES,
-      blueprintLabels,
-      useLsp: USE_LSP,
-    });
-
-    const edges = manifest.edges;
-    // A → B
-    expect(edges.some((e) => e.from === "A" && e.to === "B")).toBe(true);
-    // C → B
-    expect(edges.some((e) => e.from === "C" && e.to === "B")).toBe(true);
-    // C → A
-    expect(edges.some((e) => e.from === "C" && e.to === "A")).toBe(true);
-  });
-
-  test("computes fully_proved transitive status", async () => {
-    // All three linked to sorry-free decls, forming a chain: A → B → C
-    const blueprintLabels = new Map([
-      [
-        "A",
-        { kind: "theorem", leanDecls: ["add_zero_right"], uses: ["B"] },
-      ],
-      ["B", { kind: "lemma", leanDecls: ["NatAdd"], uses: ["C"] }],
-      [
-        "C",
-        { kind: "definition", leanDecls: ["NatAdd"], uses: [] },
-      ],
-    ]);
-
-    const manifest = await analyzeProject({
-      leanProjectPath: FIXTURES,
-      blueprintLabels,
-      useLsp: USE_LSP,
-    });
-
-    // C has no deps and no sorry → fully_proved
-    expect(manifest.nodes["C"]!.status).toBe("fully_proved");
-    // B depends on C (fully_proved) + no sorry → fully_proved
-    expect(manifest.nodes["B"]!.status).toBe("fully_proved");
-    // A depends on B (fully_proved) + no sorry → fully_proved
-    expect(manifest.nodes["A"]!.status).toBe("fully_proved");
-  });
-
-  test("propagates not_ready through dependencies", async () => {
-    // C has sorry, A depends on C
-    const blueprintLabels = new Map([
-      [
-        "A",
-        {
-          kind: "theorem",
-          leanDecls: ["add_zero_right"],
-          uses: ["C"],
-        },
-      ],
-      [
-        "C",
-        {
-          kind: "theorem",
-          leanDecls: ["add_succ_right"],
-          uses: [],
-        },
-      ],
-    ]);
-
-    const manifest = await analyzeProject({
-      leanProjectPath: FIXTURES,
-      blueprintLabels,
-      useLsp: USE_LSP,
-    });
-
-    // C has sorry → not_ready
-    expect(manifest.nodes["C"]!.status).toBe("not_ready");
-
-    // A's own decl (add_zero_right) has no sorry → proved (own proof is done)
-    // But A depends on C which has sorry → not fully_proved
-    expect(manifest.nodes["A"]!.status).toBe("proved");
-    expect(manifest.nodes["A"]!.status).not.toBe("fully_proved");
-  });
-
-  test("pending status for labels with no Lean decls", async () => {
-    const blueprintLabels = new Map([
-      [
-        "no_lean",
-        { kind: "theorem", leanDecls: ["NonExistent.Decl"], uses: [] },
-      ],
-    ]);
-
-    const manifest = await analyzeProject({
-      leanProjectPath: FIXTURES,
-      blueprintLabels,
-      useLsp: USE_LSP,
-    });
-
-    // Linked to a nonexistent decl → still has leanDecls but not found
-    // Our analyzer keeps it but marks status based on sorry detection
-    // Since the decl doesn't exist in our declInfos, hasSorry defaults to true
-    expect(manifest.nodes["no_lean"]!.leanDecls).toContain("NonExistent.Decl");
-  });
-
-  test("manifest has nodes and edges properties", async () => {
-    const manifest = await analyzeProject({
-      leanProjectPath: FIXTURES,
-      useLsp: USE_LSP,
-    });
-
-    expect(manifest.nodes).toBeDefined();
-    expect(manifest.edges).toBeDefined();
-    expect(typeof manifest.nodes).toBe("object");
-    expect(Array.isArray(manifest.edges)).toBe(true);
-  });
+  test("throws with Lean's error when a module fails to build", async () => {
+    const broken = fs.mkdtempSync(path.join(os.tmpdir(), "blueprint-probe-broken-"));
+    try {
+      fs.cpSync(FIXTURES, broken, { recursive: true });
+      fs.appendFileSync(path.join(broken, "TestProject", "Basic.lean"), "\ntheorem broken : 1 = 2 := rfl\n");
+      await expect(probeDeclarations(["NatAdd"], { leanProjectPath: broken })).rejects.toThrow(
+        /importing TestProject failed:\nerror: TestProject\/Basic\.lean/
+      );
+    } finally {
+      fs.rmSync(broken, { recursive: true, force: true });
+    }
+  }, 300_000);
 });

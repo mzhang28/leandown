@@ -1,7 +1,7 @@
 export { LeanHighlightProcessor } from "./processor.ts";
 export type { LeanHighlightOptions } from "./processor.ts";
 export { LeanLSPClient, LeanServerExitedError } from "./client.ts";
-export type { LeanHighlightResult, LeanLSPClientOptions } from "./client.ts";
+export type { LeanHighlightResult, LeanElaborateResult, LeanLSPClientOptions } from "./client.ts";
 export { LeanServerSupervisor, LeanServerUnavailableError } from "./supervisor.ts";
 export type {
   LeanServerState,

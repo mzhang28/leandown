@@ -75,6 +75,29 @@ theorem add_zero_right (n : Nat) : n + 0 = n := by
 - `(uses := "label1, label2")` — declare dependencies on other nodes
 - `(owner := "name")` — assign an owner
 - `(priority := "high")` — set priority
+- `(mathlib)` — already in mathlib; counts as stated and proved
+
+Lean names in `lean :=` must be fully qualified (`Ns.foo`, not `foo`).
+
+### Dependency graph
+
+`/graph` shows every labelled node and its `uses` edges. When
+`leanProjectPath` points at a Lean project, each node is coloured by
+leanblueprint's status model, checked against Lean itself:
+
+- **Stated** — every `lean :=` declaration exists.
+- **Proved** — stated, and `#print axioms` shows no `sorryAx` for any of
+  them (so no `sorry` anywhere in their dependency closure).
+- **Fully proved** — proved, and every dependency is fully proved.
+- **Ready to state / Ready to prove** — every dependency is stated / proved.
+
+To check names, blueprint imports the root module of every `lean_lib` in your
+lakefile. Set `"leanImports": ["MyLib.Foo", …]` in `blueprint.json` to import
+something else. `blueprint build` waits for the check. `blueprint serve` runs
+it in the background, re-runs it when `.lean` files change, and reloads the
+graph page when it's done. If the check fails (for example, a module doesn't
+compile), the graph falls back to colouring nodes by kind and prints Lean's
+error.
 
 ## CLI Commands
 

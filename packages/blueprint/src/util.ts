@@ -8,6 +8,11 @@ export interface BlueprintConfig {
   name: string;
   /** Path to the Lean project, relative to the blueprint root */
   leanProjectPath?: string;
+  /**
+   * Lean modules to import when checking declarations for the dependency
+   * graph (default: the root module of every `lean_lib` in the lakefile).
+   */
+  leanImports?: string[];
   /** Source directory for markdown files (default: "src") */
   srcDir?: string;
   /** Vite configuration — same shape as vite.config.ts UserConfig */
