@@ -17,7 +17,7 @@ references point them at sibling packages' sources.
 All published packages share one version (Nx Release, fixed mode).
 
 ```sh
-bun run release:version 0.0.22   # bump every package, commit, tag
+bun run release:version 0.0.22   # bump every package, commit, tag v0.0.22
 git push --follow-tags
 ```
 
