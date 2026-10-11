@@ -34,6 +34,9 @@ setups. **Low** means an edge case or a hardening item.
 - **X11** (stderr never drained, concurrent `highlight()` on a fresh client):
   fixed.
 - **P1** (stale `bun.lock`): fixed.
+- **C1** (`TypstBackend` output never compiles): fixed. Tokens are now Typst
+  content blocks, the `lean-block`/`lean-token` preamble ships as
+  `@leandown/core/lean.typ`, and the tests compile the output with typst 0.15.
 - **V3** (predictable `/tmp` project in the VS Code extension): fixed. The
   fallback project is now a private `mkdtemp` directory per session, removed
   on deactivate.
@@ -58,8 +61,8 @@ The most important problems, in order:
    **(verified)**
 4. **The comark adapter emits escaped HTML** (A1). Lean output appears as
    literal text. **(verified)**
-5. **The `TypstBackend` output never compiles** (C1). Nested `#raw("#raw(...)")`.
-   **(verified)**
+5. ~~**The `TypstBackend` output never compiles** (C1). Nested `#raw("#raw(...)")`.
+   **(verified)**~~ **Fixed** (`1d53575`)
 6. **The blueprint directive parser corrupts content** (B1, B2). `` $` `` /
    `$$` in a body triggers `String.replace` substitution, and the scaffolded
    `index.md` hits this. Nested, unclosed and fenced directives are mangled.
@@ -244,7 +247,7 @@ signal after cleanup.
   on the first block can block for about 100 s while elan downloads a
   toolchain (observed).
 
-### C1. `TypstBackend` output never compiles `[High]` (verified)
+### ~~C1. `TypstBackend` output never compiles `[High]`~~ Fixed in `1d53575`
 `packages/core/src/backend.ts:155-158`, `:195-205`; `client.ts:599`
 `escape()` returns `#raw("…")`, and `renderTokenStart` / `renderTokenEnd`
 already wrap the text in `#raw("` … `")`. The combined output is
@@ -637,7 +640,7 @@ Stryker and CI.
    - B4 (version pin)
    - M4 (`supports`)
    - X6 (the `path.resolve` fix)
-   - C1 (Typst escaping)
+   - ~~C1 (Typst escaping)~~
    - X1 (escape `<`)
 2. **LSP lifecycle:** ~~X2~~, X9, X10, the rest of X11. ~~Add the fake-LSP test
    harness at the same time.~~

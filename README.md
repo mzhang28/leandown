@@ -33,3 +33,17 @@ leanHydrate();
 Default styles are shipped in `@leandown/core/lean.css`.
 
 See examples in `examples`.
+
+## Typst output
+
+`TypstBackend` renders Lean blocks as Typst markup (Typst 0.15+). The output
+calls `lean-block` and `lean-token`, which are defined in the shipped preamble:
+include `@leandown/core/lean.typ` (also exported as the `TYPST_PREAMBLE`
+string) once per document, or define your own versions to restyle it.
+
+```ts
+import { LeanHighlightProcessor, TypstBackend, TYPST_PREAMBLE } from "@leandown/core";
+
+const processor = new LeanHighlightProcessor({ backend: new TypstBackend() });
+const typ = TYPST_PREAMBLE + (await processor.processBlock("def x : Nat := 1"));
+```
