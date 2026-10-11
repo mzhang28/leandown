@@ -1,6 +1,6 @@
 {
   "name": "@leandown/comark",
-  "version": "0.0.20",
+  "version": "0.0.21",
   "description": "Comark plugin for syntax-highlighting Lean 4 code blocks via the Lean LSP",
   "repository": {
     "url": "https://github.com/mzhang28/leandown"
@@ -33,6 +33,6 @@
     "comark": ">=0.1.0"
   },
   "dependencies": {
-    "@leandown/core": "workspace:*"
+    "@leandown/core": "0.0.21"
   }
 }

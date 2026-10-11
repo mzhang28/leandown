@@ -1,6 +1,6 @@
 {
   "name": "@leandown/blueprint",
-  "version": "0.0.20",
+  "version": "0.0.21",
   "description": "All-in-one CLI for managing Lean blueprint projects — markdown-based mathematical documents with Lean formalization tracking",
   "repository": {
     "url": "https://github.com/mzhang28/leandown"
@@ -68,8 +68,8 @@
     "typescript": "^5"
   },
   "dependencies": {
-    "@leandown/core": "workspace:*",
-    "@leandown/remark": "workspace:*",
+    "@leandown/core": "0.0.21",
+    "@leandown/remark": "0.0.21",
     "@tanstack/react-router": "^1.0.0",
     "cmd-ts": "^0.13.0",
     "react": "^19.0.0",
