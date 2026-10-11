@@ -40,5 +40,18 @@ export function readConfig(projectRoot: string): BlueprintConfig {
     throw new Error(`No blueprint.json found in ${projectRoot}`);
   }
   const raw = fs.readFileSync(configPath, "utf-8");
-  return JSON.parse(raw) as BlueprintConfig;
+  try {
+    return JSON.parse(raw) as BlueprintConfig;
+  } catch (err) {
+    throw new Error(`Invalid ${configPath}: ${(err as Error).message}`);
+  }
+}
+
+/**
+ * Like `readConfig`, but returns `undefined` when there is no
+ * `blueprint.json`. A malformed file still throws.
+ */
+export function readConfigIfExists(projectRoot: string): BlueprintConfig | undefined {
+  if (!fs.existsSync(path.join(projectRoot, "blueprint.json"))) return undefined;
+  return readConfig(projectRoot);
 }

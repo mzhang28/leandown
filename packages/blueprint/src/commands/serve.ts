@@ -1,5 +1,6 @@
 import { createServer } from "vite";
 import { findProjectRoot, readConfig } from "../util.ts";
+import type { BlueprintConfig } from "../util.ts";
 import { docsCommand } from "./docs.ts";
 import path from "node:path";
 import fs from "node:fs";
@@ -37,15 +38,21 @@ export async function serveCommand(opts: ServeOptions = {}): Promise<void> {
     process.exit(1);
   }
 
-  let cfg;
+  let cfg: BlueprintConfig;
   try {
     cfg = readConfig(projectRoot);
-    if (cfg.leanProjectPath) {
-      docsCommand({ background: true }).catch(() => {});
-    }
-  } catch { /* no leanProjectPath, skip */ }
+  } catch (err) {
+    console.error(`Error: ${(err as Error).message}`);
+    process.exit(1);
+  }
 
-  const cfgVite = cfg?.vite ?? {};
+  if (cfg.leanProjectPath) {
+    docsCommand({ background: true }).catch((err) => {
+      console.warn(`Skipping Lean docs: ${(err as Error).message}`);
+    });
+  }
+
+  const cfgVite = cfg.vite ?? {};
 
   console.log(`Starting dev server for blueprint in ${projectRoot}...\n`);
 

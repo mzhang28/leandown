@@ -78,9 +78,10 @@ theorem add_zero_right (n : Nat) : n + 0 = n := by
 
 ## CLI Commands
 
-### `blueprint init [--dir <path>]`
+### `blueprint init [dir]`
 
-Create a new blueprint project in the specified directory.
+Create a new blueprint project in `dir` (or `--dir <path>`), defaulting to the
+current directory.
 
 ### `blueprint build`
 

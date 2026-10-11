@@ -10,6 +10,8 @@ export interface InitOptions {
   dir?: string;
   /** Overwrite files even if the target directory is non-empty. */
   force?: boolean;
+  /** Version of this CLI; scaffolded `@leandown/*` deps are pinned to it. */
+  version: string;
 }
 
 /**
@@ -121,8 +123,8 @@ export default defineConfig({
       build: "blueprint build",
     },
     dependencies: {
-      "@leandown/blueprint": "^0.0.1",
-      "@leandown/core": "^0.0.1",
+      "@leandown/blueprint": `^${options.version}`,
+      "@leandown/core": `^${options.version}`,
       "@tanstack/react-router": "^1.0.0",
       react: "^19.0.0",
       "react-dom": "^19.0.0",

@@ -2,8 +2,8 @@ import type { Plugin as VitePlugin } from "vite";
 import { remark } from "remark";
 import remarkHtml from "remark-html";
 import remarkLean from "@leandown/remark";
-import { processDirectives, parseInfo, BLUEPRINT_KINDS } from "../plugin/index.ts";
-import { findProjectRoot, readConfig } from "../util.ts";
+import { processDirectives, scanDirectives } from "../plugin/index.ts";
+import { findProjectRoot, readConfigIfExists } from "../util.ts";
 import { parseSummary } from "./summary.ts";
 import path from "node:path";
 import fs from "node:fs";
@@ -13,9 +13,10 @@ const RESOLVED_SUMMARY_MODULE = "\0blueprint-summary";
 const GRAPH_MODULE = "@leandown/blueprint/graph";
 const RESOLVED_GRAPH_MODULE = "\0blueprint-graph";
 
-const DIRECTIVE_OPEN_RE = new RegExp(`^:::(${BLUEPRINT_KINDS.join("|")})\\s*(.*?)\\s*$`, "gm");
-
-function extractGraphData(srcDir: string): { nodes: any[]; edges: any[] } {
+function extractGraphData(
+  srcDir: string,
+  watch: (file: string) => void = () => {},
+): { nodes: any[]; edges: any[] } {
   const nodes: any[] = [];
   const edges: any[] = [];
   if (!fs.existsSync(srcDir)) return { nodes, edges };
@@ -24,6 +25,7 @@ function extractGraphData(srcDir: string): { nodes: any[]; edges: any[] } {
   const routeMap = new Map<string, string>();
   const summaryPath = path.join(srcDir, "SUMMARY.md");
   if (fs.existsSync(summaryPath)) {
+    watch(summaryPath);
     const entries = parseSummary(fs.readFileSync(summaryPath, "utf-8"));
     function walk(list: any[]) {
       for (const e of list) {
@@ -34,16 +36,21 @@ function extractGraphData(srcDir: string): { nodes: any[]; edges: any[] } {
     walk(entries);
   }
 
+  const seen = new Map<string, string>();
   for (const [srcPath, route] of routeMap) {
     const absPath = path.resolve(srcDir, srcPath.replace(/^\.\//, ""));
     if (!fs.existsSync(absPath)) continue;
+    watch(absPath);
     const content = fs.readFileSync(absPath, "utf-8");
-    DIRECTIVE_OPEN_RE.lastIndex = 0;
-    let m: RegExpExecArray | null;
-    while ((m = DIRECTIVE_OPEN_RE.exec(content)) !== null) {
-      const kind = m[1]!;
-      const { label, attrs } = parseInfo(m[2] ?? "");
+    for (const { kind, label, attrs, lineNo } of scanDirectives(content)) {
       if (!label) continue;
+      const where = `${srcPath}:${lineNo}`;
+      const firstSeen = seen.get(label);
+      if (firstSeen) {
+        console.warn(`[blueprint] duplicate label "${label}" at ${where} (first defined at ${firstSeen}); ignoring it in the graph`);
+        continue;
+      }
+      seen.set(label, where);
       const stated = !!attrs.lean;
       const proved = stated && (attrs.proved !== undefined);
       const mathlib = attrs.mathlib !== undefined;
@@ -54,9 +61,20 @@ function extractGraphData(srcDir: string): { nodes: any[]; edges: any[] } {
       });
       if (attrs.uses) {
         for (const dep of attrs.uses.split(",").map((s: string) => s.trim()).filter(Boolean)) {
-          edges.push({ source: dep, target: label });
+          edges.push({ source: dep, target: label, where });
         }
       }
+    }
+  }
+
+  // Drop edges to unknown labels; cytoscape throws on a dangling endpoint.
+  for (let i = edges.length - 1; i >= 0; i--) {
+    const e = edges[i];
+    if (!seen.has(e.source)) {
+      console.warn(`[blueprint] "${e.target}" (${e.where}) uses unknown label "${e.source}"`);
+      edges.splice(i, 1);
+    } else {
+      delete e.where;
     }
   }
 
@@ -107,6 +125,8 @@ export function blueprintVitePlugin(
 ): VitePlugin {
   let resolvedRoot: string | undefined;
   let resolvedLeanPath: string | undefined;
+  let resolvedSrcDir: string | undefined;
+  let resolvedOutDir: string | undefined;
   let resolvedBase = "/";
 
   return {
@@ -123,6 +143,18 @@ export function blueprintVitePlugin(
         },
         optimizeDeps: {
           exclude: [SUMMARY_MODULE, GRAPH_MODULE],
+          // `@leandown/blueprint/app` ships as raw TSX, which Vite's dep
+          // scanner doesn't crawl. Without this, its CommonJS deps reach
+          // the browser untransformed when installed from a registry.
+          include: [
+            "@leandown/blueprint > react",
+            "@leandown/blueprint > react/jsx-runtime",
+            "@leandown/blueprint > react/jsx-dev-runtime",
+            "@leandown/blueprint > react-dom/client",
+            "@leandown/blueprint > @tanstack/react-router",
+            "@leandown/blueprint > @leandown/core/runtime",
+            "@leandown/blueprint/graph-renderer",
+          ],
         },
       };
     },
@@ -137,7 +169,7 @@ export function blueprintVitePlugin(
         // Fallback: configResolved might not have fired yet
         resolvedRoot = findProjectRoot(process.cwd()) ?? process.cwd();
       }
-      const srcDir = path.join(resolvedRoot, "src");
+      const srcDir = resolvedSrcDir ?? path.join(resolvedRoot, "src");
 
       if (id === RESOLVED_SUMMARY_MODULE) {
         const summaryPath = path.join(srcDir, "SUMMARY.md");
@@ -150,7 +182,7 @@ export function blueprintVitePlugin(
       }
 
       if (id === RESOLVED_GRAPH_MODULE) {
-        const { nodes, edges } = extractGraphData(srcDir);
+        const { nodes, edges } = extractGraphData(srcDir, (f) => this.addWatchFile(f));
         return `export const nodes = ${JSON.stringify(nodes)};\nexport const edges = ${JSON.stringify(edges)};`;
       }
     },
@@ -164,17 +196,14 @@ export function blueprintVitePlugin(
         resolvedRoot = findProjectRoot(config.root) ?? config.root;
       }
 
+      resolvedOutDir = path.resolve(config.root, config.build.outDir);
+
+      const cfg = readConfigIfExists(resolvedRoot);
+      resolvedSrcDir = path.resolve(resolvedRoot, cfg?.srcDir ?? "src");
       if (options.leanProjectPath) {
         resolvedLeanPath = path.resolve(resolvedRoot, options.leanProjectPath);
-      } else {
-        try {
-          const cfg = readConfig(resolvedRoot);
-          if (cfg.leanProjectPath) {
-            resolvedLeanPath = path.resolve(resolvedRoot, cfg.leanProjectPath);
-          }
-        } catch {
-          // No blueprint.json — use defaults
-        }
+      } else if (cfg?.leanProjectPath) {
+        resolvedLeanPath = path.resolve(resolvedRoot, cfg.leanProjectPath);
       }
     },
 
@@ -243,10 +272,10 @@ export function blueprintVitePlugin(
     },
 
     async closeBundle() {
-      if (!resolvedLeanPath || !resolvedRoot) return;
+      if (!resolvedLeanPath || !resolvedOutDir) return;
       const docsDir = path.join(resolvedLeanPath, ".lake", "build", "doc");
       if (!fs.existsSync(docsDir)) return;
-      const distDocsDir = path.join(resolvedRoot, "dist", "docs");
+      const distDocsDir = path.join(resolvedOutDir, "docs");
       console.log(`[blueprint] Copying Lean docs to ${distDocsDir}`);
       copyDirSync(docsDir, distDocsDir);
     },
@@ -254,7 +283,10 @@ export function blueprintVitePlugin(
     async transform(code: string, id: string) {
       if (!id.endsWith(".md") || id.includes("node_modules")) return;
 
-      const withDirectives = processDirectives(code, resolvedBase);
+      const relId = resolvedRoot ? path.relative(resolvedRoot, id) : id;
+      const withDirectives = processDirectives(code, resolvedBase, {
+        warn: (msg) => console.warn(`[blueprint] ${relId}: ${msg}`),
+      });
 
       let html: string;
       try {
@@ -290,6 +322,12 @@ export function blueprintVitePlugin(
 
     async handleHotUpdate({ file, server, modules }) {
       if (file.endsWith(".md")) {
+        // The summary and graph are built from every .md file; rebuild
+        // them on the reload.
+        for (const id of [RESOLVED_SUMMARY_MODULE, RESOLVED_GRAPH_MODULE]) {
+          const mod = server.moduleGraph.getModuleById(id);
+          if (mod) server.moduleGraph.invalidateModule(mod);
+        }
         server.ws.send({ type: "full-reload" });
         return [];
       }

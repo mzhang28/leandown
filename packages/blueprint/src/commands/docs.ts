@@ -15,34 +15,34 @@ export interface DocsOptions {
  * Finds the project root, reads `leanProjectPath` from blueprint.json,
  * then runs lake in that directory.  Output is redirected to a temp file
  * so the terminal stays clean; only the log path is printed.
+ *
+ * Throws on failure rather than exiting, so `build` and `serve` can carry
+ * on without Lean docs.
  */
 export async function docsCommand(opts: DocsOptions = {}): Promise<void> {
   const cwd = process.cwd();
   const projectRoot = findProjectRoot(cwd);
 
   if (!projectRoot) {
-    console.error("Error: No blueprint.json found.");
-    process.exit(1);
+    throw new Error("No blueprint.json found.");
   }
 
-  let cfg;
-  try {
-    cfg = readConfig(projectRoot);
-  } catch {
-    console.error("Error: Could not read blueprint.json.");
-    process.exit(1);
-  }
+  const cfg = readConfig(projectRoot);
 
   if (!cfg.leanProjectPath) {
-    console.error("Error: leanProjectPath not set in blueprint.json.");
-    process.exit(1);
+    throw new Error("leanProjectPath not set in blueprint.json.");
   }
 
   const leanDir = path.resolve(projectRoot, cfg.leanProjectPath);
 
   if (!fs.existsSync(leanDir)) {
-    console.error(`Error: Lean project directory not found: ${leanDir}`);
-    process.exit(1);
+    throw new Error(`Lean project directory not found: ${leanDir}`);
+  }
+  if (
+    !fs.existsSync(path.join(leanDir, "lakefile.lean")) &&
+    !fs.existsSync(path.join(leanDir, "lakefile.toml"))
+  ) {
+    throw new Error(`No lakefile in ${leanDir}; set up a Lean project there first.`);
   }
 
   // Pipe all lake output to a temp file so the terminal stays clean.
@@ -101,10 +101,7 @@ export async function docsCommand(opts: DocsOptions = {}): Promise<void> {
     });
     console.log("Lean docs built successfully.");
   } catch {
-    console.error(
-      `lake build :docs failed.  See ${logPath}`,
-    );
-    process.exit(1);
+    throw new Error(`lake build :docs failed.  See ${logPath}`);
   } finally {
     fs.closeSync(out);
   }

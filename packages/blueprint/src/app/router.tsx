@@ -27,7 +27,13 @@ const markdownRoute = createRoute({
 
 const routeTree = rootRoute.addChildren([indexRoute, graphRoute, markdownRoute]);
 
-export const router = createRouter({ routeTree });
+// A relative base ("./") can't be a router basepath; fall back to the root.
+const BASE = import.meta.env.BASE_URL ?? "/";
+
+export const router = createRouter({
+  routeTree,
+  basepath: BASE.startsWith("/") ? BASE : "/",
+});
 
 declare module "@tanstack/react-router" {
   interface Register {

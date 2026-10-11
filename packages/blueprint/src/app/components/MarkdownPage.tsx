@@ -20,8 +20,7 @@ export function MarkdownPage() {
   const pages = useContext(PagesContext);
   const [html, setHtml] = useState<string | null>(null);
 
-  const route = slug ?? (summary[0]?.route ?? "index");
-  const entry = findEntry(summary as Entry[], route) ?? summary[0];
+  const entry = slug === undefined ? summary[0] : findEntry(summary as Entry[], slug);
 
   useEffect(() => {
     if (!entry) {
@@ -33,9 +32,20 @@ export function MarkdownPage() {
       setHtml("<p>Page not found.</p>");
       return;
     }
-    loader().then((mod) => {
-      setHtml(mod.default ?? mod.html ?? String(mod));
-    });
+    // Ignore a load that finishes after the user has moved on.
+    let cancelled = false;
+    loader().then(
+      (mod: any) => {
+        if (!cancelled) setHtml(mod.default ?? mod.html ?? String(mod));
+      },
+      (err: unknown) => {
+        console.error(`[blueprint] failed to load ${entry.srcPath}:`, err);
+        if (!cancelled) setHtml("<p>Failed to load this page.</p>");
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
   }, [entry?.srcPath]);
 
   useEffect(() => {

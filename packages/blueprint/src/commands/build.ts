@@ -1,5 +1,6 @@
 import { build as viteBuild } from "vite";
 import { findProjectRoot, readConfig } from "../util.ts";
+import type { BlueprintConfig } from "../util.ts";
 import { docsCommand } from "./docs.ts";
 import path from "node:path";
 import fs from "node:fs";
@@ -31,17 +32,26 @@ export async function buildCommand(): Promise<void> {
     process.exit(1);
   }
 
-  let cfgVite = {};
+  let cfg: BlueprintConfig;
   try {
-    const cfg = readConfig(projectRoot);
-    cfgVite = cfg.vite ?? {};
-    if (cfg.leanProjectPath) {
+    cfg = readConfig(projectRoot);
+  } catch (err) {
+    console.error(`Error: ${(err as Error).message}`);
+    process.exit(1);
+  }
+  const cfgVite = cfg.vite ?? {};
+
+  if (cfg.leanProjectPath) {
+    try {
       await docsCommand();
+    } catch (err) {
+      console.warn(`Skipping Lean docs: ${(err as Error).message}`);
     }
-  } catch { /* no blueprint.json vite config or leanProjectPath, skip */ }
+  }
 
   console.log(`Building blueprint in ${projectRoot}...\n`);
 
+  const outDir = cfgVite.build?.outDir ?? "dist";
   try {
     await viteBuild({
       ...cfgVite,
@@ -49,11 +59,13 @@ export async function buildCommand(): Promise<void> {
       configFile: viteConfigPath,
       logLevel: "info",
       build: {
-        ...(cfgVite as any).build,
-        outDir: "dist",
+        ...cfgVite.build,
+        outDir,
       },
     });
-    console.log(`\nBuild complete. Output in ${path.join(projectRoot, "dist")}/`);
+    console.log(`\nBuild complete. Output in ${path.resolve(projectRoot, outDir)}/`);
+    // The pooled Lean server keeps the event loop alive; we're done with it.
+    process.exit(0);
   } catch (err) {
     console.error("Build failed:", err);
     process.exit(1);

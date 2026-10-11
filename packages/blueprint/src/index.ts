@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { command, subcommands, run, option, flag, string, optional } from "cmd-ts";
+import { command, subcommands, run, option, positional, flag, string, optional } from "cmd-ts";
 import { initCommand } from "./commands/init.ts";
 import { buildCommand } from "./commands/build.ts";
 import { serveCommand } from "./commands/serve.ts";
@@ -16,6 +16,11 @@ const init = command({
   name: "init",
   description: "Create a new blueprint project",
   args: {
+    dirArg: positional({
+      type: optional(string),
+      displayName: "dir",
+      description: "Target directory for the new project (default: current directory)",
+    }),
     dir: option({
       type: optional(string),
       long: "dir",
@@ -29,7 +34,11 @@ const init = command({
     }),
   },
   handler: async (args) => {
-    await initCommand({ dir: args.dir, force: args.force });
+    if (args.dirArg && args.dir && args.dirArg !== args.dir) {
+      console.error("Error: give the target directory once, either as an argument or with --dir.");
+      process.exit(1);
+    }
+    await initCommand({ dir: args.dirArg ?? args.dir, force: args.force, version: pkg.version });
   },
 });
 
@@ -66,7 +75,12 @@ const docs = command({
   args: {},
   description: "Build Lean documentation via lake build :docs",
   handler: async () => {
-    await docsCommand();
+    try {
+      await docsCommand();
+    } catch (err) {
+      console.error(`Error: ${(err as Error).message}`);
+      process.exit(1);
+    }
   },
 });
 

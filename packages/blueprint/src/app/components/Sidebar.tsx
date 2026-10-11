@@ -3,8 +3,6 @@ import { summary } from "@leandown/blueprint/summary";
 
 type Entry = typeof summary[number] & { children?: Entry[] };
 
-const BASE = import.meta.env.BASE_URL ?? "/";
-
 function findEntry(entries: Entry[], route: string): Entry | undefined {
   for (const e of entries) {
     if (e.route === route) return e;
@@ -37,7 +35,8 @@ function NavEntries({ entries, current, depth = 0 }: { entries: Entry[]; current
 
 export function Sidebar() {
   const location = useLocation();
-  const current = location.pathname.replace(BASE, "").replace(/^\//, "") || (summary[0]?.route ?? "");
+  // The router strips its basepath, so this is relative to the site root.
+  const current = location.pathname.replace(/^\//, "") || (summary[0]?.route ?? "");
 
   return (
     <nav id="sidebar">
