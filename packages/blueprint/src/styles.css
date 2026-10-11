@@ -1,3 +1,104 @@
+/* ── Theme ──────────────────────────────────────────────────────────────── */
+/* Follows the system setting, like lean.css; data-theme on <html> overrides. */
+
+:root {
+  color-scheme: light dark;
+  --bp-bg: #fff;
+  --bp-fg: #1a1a1a;
+  --bp-link: #2563eb;
+  --bp-sidebar-bg: #f5f5f5;
+  --bp-border: #e0e0e0;
+  --bp-nav-fg: #555;
+  --bp-nav-hover-bg: #e8e8e8;
+  --bp-nav-hover-fg: #111;
+  --bp-nav-active-bg: #ddd;
+  --bp-nav-active-fg: #000;
+  --bp-code-bg: #f5f5f5;
+  --bp-pre-bg: #f8f8f8;
+  --bp-pre-border: #e8e8e8;
+  --bp-muted: #777;
+  --bp-faint: #999;
+  --bp-label-fg: #444;
+  --bp-label-bg: #f0f0f0;
+  --bp-legend-bg: rgba(255, 255, 255, 0.94);
+  --bp-swatch-border: #aaa;
+  --bp-chip-lean-bg: #e8f4fd;
+  --bp-chip-lean-fg: #2471a3;
+  --bp-chip-lean-hover-bg: #c5e3f7;
+  --bp-chip-lean-hover-fg: #1a5276;
+  --bp-chip-uses-bg: #fef3e0;
+  --bp-chip-uses-fg: #b8860b;
+  --bp-chip-owner-bg: #f0e6f6;
+  --bp-chip-owner-fg: #7d3c98;
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bp-bg: #1e1e2e;
+  --bp-fg: #cdd6f4;
+  --bp-link: #89b4fa;
+  --bp-sidebar-bg: #181825;
+  --bp-border: #313244;
+  --bp-nav-fg: #a6adc8;
+  --bp-nav-hover-bg: #313244;
+  --bp-nav-hover-fg: #cdd6f4;
+  --bp-nav-active-bg: #45475a;
+  --bp-nav-active-fg: #fff;
+  --bp-code-bg: #313244;
+  --bp-pre-bg: #181825;
+  --bp-pre-border: #313244;
+  --bp-muted: #9399b2;
+  --bp-faint: #7f849c;
+  --bp-label-fg: #bac2de;
+  --bp-label-bg: #313244;
+  --bp-legend-bg: rgba(30, 30, 46, 0.94);
+  --bp-swatch-border: #6c7086;
+  --bp-chip-lean-bg: #1e3a5f;
+  --bp-chip-lean-fg: #89b4fa;
+  --bp-chip-lean-hover-bg: #264b78;
+  --bp-chip-lean-hover-fg: #b4d0fb;
+  --bp-chip-uses-bg: #3d3420;
+  --bp-chip-uses-fg: #f9e2af;
+  --bp-chip-owner-bg: #3a2d45;
+  --bp-chip-owner-fg: #cba6f7;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bp-bg: #1e1e2e;
+    --bp-fg: #cdd6f4;
+    --bp-link: #89b4fa;
+    --bp-sidebar-bg: #181825;
+    --bp-border: #313244;
+    --bp-nav-fg: #a6adc8;
+    --bp-nav-hover-bg: #313244;
+    --bp-nav-hover-fg: #cdd6f4;
+    --bp-nav-active-bg: #45475a;
+    --bp-nav-active-fg: #fff;
+    --bp-code-bg: #313244;
+    --bp-pre-bg: #181825;
+    --bp-pre-border: #313244;
+    --bp-muted: #9399b2;
+    --bp-faint: #7f849c;
+    --bp-label-fg: #bac2de;
+    --bp-label-bg: #313244;
+    --bp-legend-bg: rgba(30, 30, 46, 0.94);
+    --bp-swatch-border: #6c7086;
+    --bp-chip-lean-bg: #1e3a5f;
+    --bp-chip-lean-fg: #89b4fa;
+    --bp-chip-lean-hover-bg: #264b78;
+    --bp-chip-lean-hover-fg: #b4d0fb;
+    --bp-chip-uses-bg: #3d3420;
+    --bp-chip-uses-fg: #f9e2af;
+    --bp-chip-owner-bg: #3a2d45;
+    --bp-chip-owner-fg: #cba6f7;
+  }
+}
+
 /* ── Reset & base ────────────────────────────────────────────────────────── */
 
 html, body {
@@ -7,8 +108,8 @@ html, body {
   font-family: system-ui, -apple-system, sans-serif;
   font-size: 1rem;
   line-height: 1.5;
-  color: #1a1a1a;
-  background: #fff;
+  color: var(--bp-fg);
+  background: var(--bp-bg);
 }
 
 /* ── Layout ─────────────────────────────────────────────────────────────── */
@@ -22,8 +123,8 @@ html, body {
 /* ── Sidebar ─────────────────────────────────────────────────────────────── */
 
 #sidebar {
-  background: #f5f5f5;
-  border-right: 1px solid #e0e0e0;
+  background: var(--bp-sidebar-bg);
+  border-right: 1px solid var(--bp-border);
   padding: 1rem 0.75rem;
   position: sticky;
   top: 0;
@@ -51,24 +152,24 @@ html, body {
   display: block;
   padding: 0.15rem 0.4rem;
   text-decoration: none;
-  color: #555;
+  color: var(--bp-nav-fg);
   border-radius: 2px;
 }
 
 .nav-link:hover {
-  background: #e8e8e8;
-  color: #111;
+  background: var(--bp-nav-hover-bg);
+  color: var(--bp-nav-hover-fg);
 }
 
 .nav-link.active {
-  background: #ddd;
-  color: #000;
+  background: var(--bp-nav-active-bg);
+  color: var(--bp-nav-active-fg);
   font-weight: 500;
 }
 
 .nav-graph {
   margin-top: 0.5rem;
-  border-top: 1px solid #e0e0e0;
+  border-top: 1px solid var(--bp-border);
   padding-top: 0.5rem;
 }
 
@@ -91,15 +192,15 @@ html, body {
 #content p  { margin: 0.25rem 0 0.5rem; }
 #content code {
   font-size: 0.8125rem;
-  background: #f5f5f5;
+  background: var(--bp-code-bg);
   padding: 0.1em 0.3em;
   border-radius: 2px;
 }
 #content pre {
   margin: 0.5rem 0;
   padding: 0.75rem;
-  background: #f8f8f8;
-  border: 1px solid #e8e8e8;
+  background: var(--bp-pre-bg);
+  border: 1px solid var(--bp-pre-border);
   border-radius: 3px;
   overflow-x: auto;
   font-size: 0.8125rem;
@@ -109,6 +210,9 @@ html, body {
   background: none;
   padding: 0;
 }
+#content a { color: var(--bp-link); }
+#content a.blueprint-chip--lean { color: var(--bp-chip-lean-fg); }
+
 /* lean.css boxes the code itself; the pre already is one. */
 #content pre code.language-lean {
   border: none;
@@ -148,15 +252,15 @@ html, body {
 .blueprint-kind {
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: #777;
+  color: var(--bp-muted);
   font-size: 0.6875rem;
   font-weight: 500;
 }
 
 .blueprint-label {
   font-family: "SF Mono", "Fira Code", "Fira Mono", monospace;
-  color: #444;
-  background: #f0f0f0;
+  color: var(--bp-label-fg);
+  background: var(--bp-label-bg);
   padding: 0 0.3rem;
   border-radius: 2px;
   font-size: 0.75rem;
@@ -175,10 +279,10 @@ html, body {
   font-weight: 500;
 }
 
-.blueprint-chip--lean  { background: #e8f4fd; color: #2471a3; text-decoration: none; cursor: pointer; }
-.blueprint-chip--lean:hover { background: #c5e3f7; color: #1a5276; }
-.blueprint-chip--uses  { background: #fef3e0; color: #b8860b; }
-.blueprint-chip--owner { background: #f0e6f6; color: #7d3c98; }
+.blueprint-chip--lean  { background: var(--bp-chip-lean-bg); color: var(--bp-chip-lean-fg); text-decoration: none; cursor: pointer; }
+.blueprint-chip--lean:hover { background: var(--bp-chip-lean-hover-bg); color: var(--bp-chip-lean-hover-fg); }
+.blueprint-chip--uses  { background: var(--bp-chip-uses-bg); color: var(--bp-chip-uses-fg); }
+.blueprint-chip--owner { background: var(--bp-chip-owner-bg); color: var(--bp-chip-owner-fg); }
 
 .blueprint-content > :first-child { margin-top: 0; }
 .blueprint-content > :last-child  { margin-bottom: 0; }
@@ -191,8 +295,8 @@ html, body {
   left: 0.75rem;
   z-index: 10;
   padding: 0.4rem 0.6rem;
-  background: rgba(255,255,255,0.94);
-  border: 1px solid #e0e0e0;
+  background: var(--bp-legend-bg);
+  border: 1px solid var(--bp-border);
   border-radius: 3px;
   font-size: 0.6875rem;
   pointer-events: auto;
@@ -211,7 +315,7 @@ html, body {
 
 .graph-legend-toggle {
   font-size: 0.5rem;
-  color: #999;
+  color: var(--bp-faint);
   flex-shrink: 0;
 }
 
@@ -220,7 +324,7 @@ html, body {
   font-size: 0.6875rem;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: #777;
+  color: var(--bp-muted);
 }
 
 .graph-legend-body {
@@ -235,7 +339,7 @@ html, body {
 .graph-legend-section-title {
   font-weight: 500;
   font-size: 0.625rem;
-  color: #999;
+  color: var(--bp-faint);
   margin-bottom: 0.15rem;
 }
 
@@ -245,7 +349,7 @@ html, body {
   gap: 0.3rem;
   margin-right: 0.75rem;
   margin-bottom: 0.1rem;
-  color: #444;
+  color: var(--bp-label-fg);
 }
 
 .graph-legend-swatch {
@@ -253,7 +357,7 @@ html, body {
   width: 10px;
   height: 10px;
   border-radius: 2px;
-  border: 1.5px solid #aaa;
+  border: 1.5px solid var(--bp-swatch-border);
   flex-shrink: 0;
 }
 
