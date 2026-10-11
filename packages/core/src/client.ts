@@ -35,14 +35,49 @@ interface PendingRequest {
   timer: ReturnType<typeof setTimeout>;
 }
 
+/** Max bytes of server stderr kept for error messages. */
+const STDERR_TAIL_BYTES = 4096;
+
+/**
+ * The Lean server process died (crashed, was killed, or failed to launch).
+ * Every in-flight request on that client rejects with this error.
+ */
+export class LeanServerExitedError extends Error {
+  override name = "LeanServerExitedError";
+  constructor(
+    message: string,
+    readonly code: number | null = null,
+    readonly signal: NodeJS.Signals | null = null,
+    /** Last few KB of the server's stderr, if any. */
+    readonly stderr = "",
+    /** The underlying spawn error, e.g. ENOENT when `lake` is missing. */
+    readonly spawnError?: NodeJS.ErrnoException
+  ) {
+    super(stderr ? `${message}\n${stderr}` : message);
+  }
+}
+
+export interface LeanLSPClientOptions {
+  /** Command used to launch the server. Default: `["lake", "serve"]`. */
+  command?: [string, ...string[]];
+}
+
 export interface LeanHighlightResult {
   html: string;
   /** False when highlighting ran before `$/lean/fileProgress` reported completion. */
   compileComplete: boolean;
 }
 
+/**
+ * A connection to one `lake serve` process. A client is single-use: once its
+ * process exits, every later call rejects with {@link LeanServerExitedError}.
+ * Use {@link LeanServerSupervisor} for automatic restarts.
+ */
 export class LeanLSPClient {
   private proc: ChildProcess | null = null;
+  private exitError: LeanServerExitedError | null = null;
+  private exitListeners = new Set<(err: LeanServerExitedError) => void>();
+  private stderrTail = "";
   private initPromise: Promise<void> | null = null;
   private buffer = Buffer.alloc(0);
   private nextRequestId = 1;
@@ -52,38 +87,69 @@ export class LeanLSPClient {
   private legend: string[] = [];
 
   private projectPath: string;
-  constructor(projectPath: string) {
+  private command: [string, ...string[]];
+  constructor(projectPath: string, options: LeanLSPClientOptions = {}) {
     this.projectPath = projectPath;
+    this.command = options.command ?? ["lake", "serve"];
+  }
+
+  /** True once the server process has died; the client cannot be reused. */
+  get exited(): boolean {
+    return this.exitError !== null;
+  }
+
+  /** Register a callback for when the server process dies. Returns an unsubscribe function. */
+  onExit(listener: (err: LeanServerExitedError) => void): () => void {
+    if (this.exitError) {
+      listener(this.exitError);
+      return () => {};
+    }
+    this.exitListeners.add(listener);
+    return () => this.exitListeners.delete(listener);
   }
 
   start(): Promise<void> {
+    if (this.exitError) return Promise.reject(this.exitError);
     if (this.initPromise) return this.initPromise;
     this.initPromise = (async () => {
-      this.proc = spawn("lake", ["serve"], { cwd: this.projectPath });
+      const [cmd, ...args] = this.command;
+      const proc = spawn(cmd, args, { cwd: this.projectPath });
+      this.proc = proc;
 
-      this.proc.stdout!.on("data", (chunk) => {
+      proc.stdout!.on("data", (chunk) => {
         this.buffer = Buffer.concat([this.buffer, chunk]);
         this.parseMessages();
       });
 
-      this.proc.on("error", (err) => {
-        const e = err instanceof Error ? err : new Error(String(err));
-        // ENOENT here means `lake` isn't on PATH — the most common setup
-        // mistake. Turn the cryptic "spawn lake ENOENT" into actionable text.
-        const friendly =
-          (e as NodeJS.ErrnoException).code === "ENOENT"
-            ? new Error(
-                "leandown: could not launch `lake`. Lean 4 must be installed " +
-                  "and on your PATH. Install it via elan: https://lean-lang.org/install/"
-              )
-            : e;
-        console.error("Lean LSP Process Error:", friendly.message);
-        this.failAllPending(friendly);
+      // Drain stderr: an unread pipe fills up and blocks the server. Keep the
+      // tail so crash errors can say what went wrong.
+      proc.stderr!.on("data", (chunk: Buffer) => {
+        this.stderrTail = (this.stderrTail + chunk.toString("utf8")).slice(-STDERR_TAIL_BYTES);
       });
 
-      this.proc.on("exit", (code, signal) => {
-        this.failAllPending(
-          new Error(`Lean LSP process exited (code ${code}, signal ${signal})`)
+      // Writes to a dead process emit EPIPE here; without a listener that
+      // would be an uncaught exception. The `exit` handler reports the death.
+      proc.stdin!.on("error", () => {});
+
+      proc.on("error", (err: NodeJS.ErrnoException) => {
+        // ENOENT here means `lake` isn't on PATH — the most common setup
+        // mistake. Turn the cryptic "spawn lake ENOENT" into actionable text.
+        const message =
+          err.code === "ENOENT"
+            ? `leandown: could not launch \`${cmd}\`. Lean 4 must be installed ` +
+              "and on your PATH. Install it via elan: https://lean-lang.org/install/"
+            : `leandown: Lean server process error: ${err.message}`;
+        this.handleExit(new LeanServerExitedError(message, null, null, this.stderrTail, err));
+      });
+
+      proc.on("exit", (code, signal) => {
+        this.handleExit(
+          new LeanServerExitedError(
+            `Lean LSP process exited (code ${code}, signal ${signal})`,
+            code,
+            signal,
+            this.stderrTail
+          )
         );
       });
 
@@ -143,9 +209,7 @@ export class LeanLSPClient {
       backend?: LeanHighlightBackend;
     }
   ): Promise<LeanHighlightResult> {
-    if (!this.proc) {
-      await this.start();
-    }
+    await this.start();
 
     const { compileMarkdown } = options;
     const backend = options.backend ?? new HtmlBackend();
@@ -674,7 +738,7 @@ export class LeanLSPClient {
   }
 
   async shutdown(): Promise<void> {
-    if (this.proc) {
+    if (this.proc && !this.exitError) {
       try {
         await this.sendRequest("shutdown", null);
         this.sendNotification("exit", {});
@@ -691,13 +755,25 @@ export class LeanLSPClient {
    * still in flight so no promise, timer, or child process is left dangling.
    */
   killSync(): void {
-    this.failAllPending(new Error("Lean LSP client terminated"));
+    const proc = this.proc;
+    this.handleExit(new LeanServerExitedError("Lean LSP client terminated"));
+    proc?.kill();
+  }
+
+  /**
+   * Single place where the process is declared dead: settle everything in
+   * flight and notify listeners. Idempotent, since `error`, `exit` and
+   * `killSync` can all fire for the same process.
+   */
+  private handleExit(err: LeanServerExitedError): void {
+    if (this.exitError) return;
+    this.exitError = err;
+    this.proc = null;
+    this.failAllPending(err);
     for (const resolve of this.compileWaiters.values()) resolve();
     this.compileWaiters.clear();
-    if (this.proc) {
-      this.proc.kill();
-      this.proc = null;
-    }
+    for (const listener of this.exitListeners) listener(err);
+    this.exitListeners.clear();
   }
 
   /** Reject every in-flight request and clear its timeout. */
@@ -726,7 +802,8 @@ export class LeanLSPClient {
         "utf8"
       )}\r\n\r\n${payload}`;
       try {
-        this.proc!.stdin!.write(message);
+        if (!this.proc) throw this.exitError ?? new Error("Lean LSP client not started");
+        this.proc.stdin!.write(message);
       } catch (err) {
         this.pendingRequests.delete(id);
         clearTimeout(timer);
@@ -741,7 +818,8 @@ export class LeanLSPClient {
       payload,
       "utf8"
     )}\r\n\r\n${payload}`;
-    this.proc!.stdin!.write(message);
+    if (!this.proc) throw this.exitError ?? new Error("Lean LSP client not started");
+    this.proc.stdin!.write(message);
   }
 
   private parseMessages() {

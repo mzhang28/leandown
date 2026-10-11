@@ -1,4 +1,8 @@
-import { LeanLSPClient } from "./client.ts";
+import {
+  LeanServerSupervisor,
+  type LeanServerOptions,
+  type LeanServerStateInfo,
+} from "./supervisor.ts";
 import {
   getCachedHighlight,
   setCachedHighlight,
@@ -28,9 +32,31 @@ export interface LeanHighlightOptions {
   compileMarkdown?: (markdown: string) => Promise<string> | string;
   /** Custom backend for rendering the highlighted output. Defaults to HtmlBackend. */
   backend?: LeanHighlightBackend;
+  /**
+   * Lean server restart policy. Crashed servers are restarted with exponential
+   * backoff, up to `maxRetries` (default 5) consecutive failures. Blocks wait
+   * through a restart unless `waitForReady: false`. State changes are logged
+   * to stderr unless `onStateChange` is given. The first processor created for
+   * a project path decides the policy for that path's shared server.
+   */
+  server?: LeanServerOptions;
 }
 
-const clientPool = new Map<string, LeanLSPClient>();
+function logStateChange(info: LeanServerStateInfo): void {
+  const why = info.error ? `: ${info.error.message.split("\n")[0]}` : "";
+  if (info.state === "backoff") {
+    const secs = (((info.nextRetryAt ?? Date.now()) - Date.now()) / 1000).toFixed(1);
+    console.warn(
+      `leandown: Lean server stopped${why}. Restarting in ${secs}s (attempt ${info.failures}/${info.maxRetries}).`
+    );
+  } else if (info.state === "failed") {
+    console.error(`leandown: Lean server failed after ${info.failures} attempt(s)${why}`);
+  } else if (info.state === "ready" && info.failures > 0) {
+    console.warn("leandown: Lean server restarted.");
+  }
+}
+
+const clientPool = new Map<string, LeanServerSupervisor>();
 let isShuttingDown = false;
 let tempProjectPath: string | null = null;
 
@@ -66,12 +92,17 @@ function getOrCreateTempProject(): string {
   return dir;
 }
 
-function getClient(projectPath: string): LeanLSPClient {
-  if (!clientPool.has(projectPath)) {
-    const client = new LeanLSPClient(projectPath);
-    clientPool.set(projectPath, client);
+function getServer(projectPath: string, options: LeanServerOptions = {}): LeanServerSupervisor {
+  let server = clientPool.get(projectPath);
+  if (!server) {
+    server = new LeanServerSupervisor(projectPath, {
+      ...options,
+      waitForReady: options.waitForReady ?? true,
+      onStateChange: options.onStateChange ?? logStateChange,
+    });
+    clientPool.set(projectPath, server);
   }
-  return clientPool.get(projectPath)!;
+  return server;
 }
 
 function cleanupClients() {
@@ -81,8 +112,8 @@ function cleanupClients() {
   // to await the graceful shutdown request, so `proc.kill()` must run directly
   // (otherwise `lake serve` children are orphaned and the temp dir is deleted
   // out from under a still-running server).
-  for (const client of clientPool.values()) {
-    client.killSync();
+  for (const server of clientPool.values()) {
+    server.killSync();
   }
   if (tempProjectPath) {
     const resolvedPath = path.resolve(tempProjectPath);
@@ -131,8 +162,6 @@ export class LeanHighlightProcessor {
    */
   async processBlock(content: string): Promise<string> {
     const projectPath = this.options.leanProjectPath ?? getOrCreateTempProject();
-    const client = getClient(projectPath);
-    await client.start();
 
     const syncHovers = this.options.synchronizedHovers ?? true;
     const backend = this.options.backend ?? new HtmlBackend();
@@ -148,7 +177,8 @@ export class LeanHighlightProcessor {
     let highlighted = await getCachedHighlight(cacheKey, this.options.cacheDir);
 
     if (!highlighted) {
-      const result = await client.highlight(content, {
+      // The server starts lazily here, so fully cached builds never launch Lean.
+      const result = await getServer(projectPath, this.options.server).highlight(content, {
         synchronizedHovers: syncHovers,
         prependCode: this.cumulativeContent,
         compileMarkdown: this.options.compileMarkdown,
@@ -179,9 +209,9 @@ export class LeanHighlightProcessor {
   async shutdown(): Promise<void> {
     const projectPath = this.options.leanProjectPath ?? tempProjectPath;
     if (projectPath) {
-      const client = clientPool.get(projectPath);
-      if (client) {
-        await client.shutdown();
+      const server = clientPool.get(projectPath);
+      if (server) {
+        await server.shutdown();
         clientPool.delete(projectPath);
       }
     }

@@ -25,6 +25,20 @@ setups. **Low** means an edge case or a hardening item.
 
 ---
 
+## Resolution status
+
+- **X2** (dead LSP never restarted): fixed. `LeanServerSupervisor` restarts
+  crashed servers with exponential backoff and jitter (`maxRetries`, default
+  5), and exposes the connection state. A dead `LeanLSPClient` now rejects
+  cleanly instead of hanging.
+- **X11** (stderr never drained, concurrent `highlight()` on a fresh client):
+  fixed.
+- **P1** (stale `bun.lock`): fixed.
+- **X6** (cache hits still start Lean): fixed; servers now start lazily on the
+  first cache miss. The rest of X6 is still open.
+
+---
+
 ## Executive summary
 
 The most important problems, in order:
