@@ -46,8 +46,9 @@ setups. **Low** means an edge case or a hardening item.
   `init` → `npm install` → `build`/`serve` now works from packed tarballs,
   including under `base: "/repo/"`. `blueprint build` exits once done.
 - **B8/B9** (graph statuses, analyzer): fixed. Graph statuses now come from
-  Lean: the analyzer runs `#print axioms` on every `lean :=` name and
-  computes leanblueprint's states from dependencies. B12 and the noted
+  Lean: the analyzer asks Lean, per `lean :=` name, whether it exists,
+  whether its own proof uses `sorry`, and whether `sorry` appears below it
+  (`063e8e1`), and computes the states from dependencies. B12 and the noted
   parts of B10/B11 are still open.
 
 ---
