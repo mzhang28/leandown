@@ -44,8 +44,11 @@ setups. **Low** means an edge case or a hardening item.
   first cache miss. The rest of X6 is still open.
 - **Blueprint** (B1–B7, F1, F2, and most of B10/B11): fixed. A fresh
   `init` → `npm install` → `build`/`serve` now works from packed tarballs,
-  including under `base: "/repo/"`. `blueprint build` exits once done. B8,
-  B9, B12 and the noted parts of B10/B11 are still open.
+  including under `base: "/repo/"`. `blueprint build` exits once done.
+- **B8/B9** (graph statuses, analyzer): fixed. Graph statuses now come from
+  Lean: the analyzer runs `#print axioms` on every `lean :=` name and
+  computes leanblueprint's states from dependencies. B12 and the noted
+  parts of B10/B11 are still open.
 
 ---
 
@@ -368,7 +371,7 @@ through `escapeHtml`.
 **Fix:** watch the scanned files or invalidate the module, and dedupe ids with
 a warning.
 
-### B8. Graph statuses don't match the legend `[Medium]`
+### ~~B8. Graph statuses don't match the legend `[Medium]`~~ Fixed in `945194b`
 `packages/blueprint/src/vite/blueprint-plugin.ts:47-49`, `:71-77`; `vite/graph-renderer.ts:67-80`, `:149-164`, `:287-288`
 - **Status not checked:** `stated` means "has a `lean` attribute" and `proved`
   means "has a `proved` attribute". Neither is checked against Lean.
@@ -384,7 +387,7 @@ a warning.
 **Fix:** compute states from dependency statuses the way leanblueprint does,
 detect cycles, and use `axis: "y"`.
 
-### B9. Lean analyzer is wrong, and costly when it runs `[Medium]`
+### ~~B9. Lean analyzer is wrong, and costly when it runs `[Medium]`~~ Fixed in `945194b`
 `packages/blueprint/src/lean/analyzer.ts:29`, `:93-106`, `:127-136`, `:160-179`, `:240-257`, `:323`, `:343-372`
 `analyzeProject` isn't called anywhere in the build. It has these defects:
 - **Same-line attribute attached to the wrong declaration:** a same-line
@@ -700,7 +703,8 @@ installed through the `peerDependencies` of `@leandown/core` and
     wiped every run)
   - process exit and shutdown
   - ~~nested or fenced directives, and `$` in directive bodies~~ (added in `a8893a8`)
-  - same-line `@[blueprint]` and namespaces in the analyzer
+  - ~~same-line `@[blueprint]` and namespaces in the analyzer~~ (the
+    analyzer now asks Lean; namespaces and indirect sorry are tested in `945194b`)
   - non-root Vite `base`
 - **Blueprint e2e can't run as written:** `tests/blueprint.spec.ts:64` pins
   `PACK_VERSION = "0.0.11"`, and `scripts/pack-local.mjs` fails on the second
