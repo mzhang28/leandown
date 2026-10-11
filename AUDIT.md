@@ -597,6 +597,78 @@ Stryker and CI.
 
 ---
 
+## Fresh-install walkthrough
+
+On 2026-10-10 all six packages were published at `c82a1b5` to a local Verdaccio
+registry using `scripts/publish-packages.mjs`. New projects then followed each
+README using only `npm`.
+
+| Story | Result |
+|---|---|
+| remark quick start (README) | Correct output, and hovers work in the browser after a Vite build. **The script never exits** (killed after 5 min). |
+| `blueprint init` → install → build/serve | **Blocked at three separate steps** (F1, B4, B3). With all three worked around, `serve` shows a **blank page** (F2), and the built site is corrupted (B1). |
+| mdbook (README config) | `command = "mdbook-leandown"` **is not found** (F3). With `npx mdbook-leandown` it builds in 2.7 s and exits. |
+| Typst via `@leandown/core` (README) | Output compiles with typst 0.15.1. **The script never exits.** |
+| markdown-it | The installed package has no README (F4). |
+
+### F1. README's `blueprint init my-blueprint` is rejected `[High]` (verified)
+`packages/blueprint/README.md` (Quick Start) vs the CLI. `init` takes only
+`--dir`, so a positional argument gives `Unknown arguments` and the first
+command a new user runs fails.
+**Fix:** accept a positional directory, or correct the README.
+
+### B4 update: the `^0.0.1` pin makes install impossible `[High]` (verified)
+0.0.1 was never published (real npm has 0.0.15 and later), so `npm install` and
+`bun install` in a scaffolded project fail with `ETARGET` / "No version
+matching". No new project can be installed without editing `package.json` by
+hand.
+
+### F2. Blueprint dev server renders a blank page for registry installs `[High]` (verified)
+`packages/blueprint/package.json` (`"./app": "./src/app/main.tsx"`), `vite/blueprint-plugin.ts` (`optimizeDeps`)
+Vite does not pre-bundle the dependencies of the raw-TSX `@leandown/blueprint/app`,
+so CommonJS packages reach the browser untransformed. The browser reports
+`escape-html … does not provide an export named 'default'`. After that is
+fixed, `use-sync-external-store` (pulled in by `@tanstack/react-router`) fails
+the same way. Production builds work because Rollup converts CommonJS. The
+in-repo e2e setup doesn't catch this because the workspace link changes how
+Vite optimises dependencies.
+**Fix (verified):** the plugin's `config()` should set `optimizeDeps.include`
+to `@leandown/blueprint > react`, `… > react-dom/client`,
+`… > @tanstack/react-router`, `… > @leandown/core/runtime`, and
+`@leandown/blueprint/graph-renderer`. Ship the app pre-built as well (see P4).
+
+### F3. mdbook README config can't find the preprocessor `[Medium]` (verified)
+`packages/mdbook/README.md`. The README installs with `--save-dev`, but
+`node_modules/.bin` isn't on mdbook's `PATH`, so `command = "mdbook-leandown"`
+fails with "wasn't found".
+**Fix:** document `command = "npx mdbook-leandown"`, or a global install.
+
+### F4. Symlinked READMEs are not packed `[Low]` (verified)
+`packages/{core,remark,markdown-it,comark}/README.md` are symlinks to the root
+README, and npm does not pack symlinks. The real `@leandown/remark@0.0.20`
+tarball contains only `dist/` and `package.json`. npmjs.com still shows a
+README because it comes from publish metadata, but installed packages have
+none.
+**Fix:** copy the README in `prepack`, or replace the symlinks with real files.
+
+### F5. Scripts that follow the README hang `[High]`
+This is X11 "no clean exit" seen from the user's side. The remark quick start
+and the Typst snippet both print their output and then never exit, because the
+pooled `lake serve` keeps the event loop alive. Any build script that uses them
+hangs CI. This should move up from Low.
+
+### F6. `@leandown/core` ships test artefacts `[Low]`
+`tsc -p tsconfig.build.json` emits `*.test.d.ts` and `__fixtures__/` into
+`dist/`, and they are published.
+**Fix:** exclude `**/*.test.ts` and `__fixtures__` in `tsconfig.build.json`.
+
+### F7. Scaffolded projects pull in TypeScript `[Low]`
+P5 confirmed: `npm ls` in a plain remark project shows `typescript@5.9.3`
+installed through the `peerDependencies` of `@leandown/core` and
+`@leandown/remark`.
+
+---
+
 ## Test coverage gaps
 
 - **Untested modules:**
