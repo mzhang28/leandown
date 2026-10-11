@@ -14,17 +14,21 @@ references point them at sibling packages' sources.
 
 ## Releasing
 
-All published packages share one version (Nx Release, fixed mode).
+All published packages share one version (Nx Release, fixed mode). Bumping
+and publishing are separate commands:
 
 ```sh
 bun run release:version 0.0.22   # bump every package, commit, tag v0.0.22
-git push --follow-tags
+bun run release:publish          # build and publish every package to npm
 ```
 
-Then run the **Release** workflow on GitHub (leave "dry run" on to check
-first). It builds, lints the packages with publint, and runs
-`nx release publish`, which skips versions already on npm and publishes the
-rest via OIDC trusted publishing.
+`release:publish` uses your `npm login` credentials, builds each package
+first, and skips versions already on npm, so a failed run can be re-run. Add
+`--dry-run` to either command to preview it. Push the commit and tag with
+`git push --follow-tags`.
+
+The **Release** workflow on GitHub runs the same publish step in CI with OIDC
+trusted publishing instead of your credentials.
 
 To try packages locally before releasing:
 
