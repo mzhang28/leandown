@@ -42,6 +42,10 @@ setups. **Low** means an edge case or a hardening item.
   on deactivate.
 - **X6** (cache hits still start Lean): fixed; servers now start lazily on the
   first cache miss. The rest of X6 is still open.
+- **Blueprint rewritten in Typst** (`139dfa6`): the markdown directive parser,
+  React app and Vite plugin are gone, so B1–B7, B10, B11, B12, F2 and the
+  pre-built-app item no longer apply. `tests/blueprint.spec.ts` (P2) targets
+  the old markdown pipeline and needs rewriting.
 - **Release tooling** (P4, F6, pre-built blueprint app): fixed. Nx Release
   replaces the custom publish scripts; exports point at `dist/`.
 - **Blueprint** (B1–B7, F1, F2, and most of B10/B11): fixed. A fresh
