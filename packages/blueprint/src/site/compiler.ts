@@ -3,8 +3,6 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
-import type { NodeCompiler } from "@myriaddreamin/typst-ts-node-compiler";
-import "./typst-bundle.ts";
 
 /** A file emitted by compiling a Typst bundle. */
 export interface CompiledFile {
@@ -34,11 +32,11 @@ export interface CompilerOptions {
 /** Typst warns about these on every compile; they say nothing actionable. */
 const EXPERIMENTAL_WARNING = /export is (experimental|under active development)/;
 
-const TYPST_TS_PACKAGE = "@myriaddreamin/typst-ts-node-compiler";
+const TYPST_TS_PACKAGE = "@leandown/typst.ts";
 
 /**
- * Picks a compiler. `"auto"` uses typst.ts when it's installed and can
- * compile bundles (leandown's build of it), and otherwise the `typst` CLI.
+ * Picks a compiler. `"auto"` uses `@leandown/typst.ts` (WebAssembly) when
+ * it's installed, and otherwise the `typst` CLI.
  */
 export async function createCompiler(options: CompilerOptions): Promise<BundleCompiler> {
   const choice = options.choice ?? "auto";
@@ -46,7 +44,7 @@ export async function createCompiler(options: CompilerOptions): Promise<BundleCo
 
   if (choice === "auto" || choice === "typst.ts") {
     const loaded = await loadTypstTs();
-    if (typeof loaded !== "string") return new TypstTsCompiler(loaded, options);
+    if (typeof loaded !== "string") return new TypstTsBundleCompiler(loaded, options);
     if (choice === "typst.ts") throw new Error(loaded);
     problems.push(loaded);
   }
@@ -62,48 +60,64 @@ export async function createCompiler(options: CompilerOptions): Promise<BundleCo
   throw new Error(`No usable Typst compiler:\n  - ${problems.join("\n  - ")}`);
 }
 
-type NodeCompilerModule = { NodeCompiler: typeof NodeCompiler };
-
-async function loadTypstTs(): Promise<NodeCompilerModule | string> {
-  let mod: NodeCompilerModule;
-  try {
-    const imported = (await import(TYPST_TS_PACKAGE)) as Partial<NodeCompilerModule> & { default?: NodeCompilerModule };
-    // It's CommonJS: the named export may only be reachable through `default`.
-    mod = imported.NodeCompiler ? (imported as NodeCompilerModule) : imported.default!;
-  } catch {
-    return `${TYPST_TS_PACKAGE} isn't installed.`;
-  }
-  if (typeof mod.NodeCompiler?.prototype?.bundle !== "function") {
-    return `The installed ${TYPST_TS_PACKAGE} can't compile Typst bundles (leandown's build of typst.ts can).`;
-  }
-  return mod;
+// The subset of @leandown/typst.ts that blueprint uses. Typed here so that
+// blueprint builds without it installed.
+interface TypstTsDiagnostic {
+  path: string;
+  range: string;
+  severity: string;
+  message: string;
+}
+interface TypstTsCompiler {
+  bundle(options: { root: string; entry: string }): {
+    hasError: boolean;
+    diagnostics: TypstTsDiagnostic[];
+    files: CompiledFile[];
+  };
+  reset(): void;
+}
+interface TypstTsModule {
+  createCompiler(options?: { fontPaths?: string[] }): Promise<TypstTsCompiler>;
 }
 
-/** Compiles in-process with typst.ts; fast for repeated builds. */
-class TypstTsCompiler implements BundleCompiler {
-  readonly name = "typst.ts";
-  private readonly compiler: NodeCompiler;
+async function loadTypstTs(): Promise<TypstTsModule | string> {
+  try {
+    const imported = (await import(TYPST_TS_PACKAGE)) as Partial<TypstTsModule> & { default?: TypstTsModule };
+    // It's CommonJS: the export may only be reachable through `default`.
+    const mod = imported.createCompiler ? (imported as TypstTsModule) : imported.default;
+    if (!mod?.createCompiler) return `${TYPST_TS_PACKAGE} doesn't export createCompiler.`;
+    return mod;
+  } catch (err) {
+    return (err as NodeJS.ErrnoException).code === "ERR_MODULE_NOT_FOUND"
+      ? `${TYPST_TS_PACKAGE} isn't installed.`
+      : `${TYPST_TS_PACKAGE} failed to load: ${(err as Error).message}`;
+  }
+}
 
-  constructor(mod: NodeCompilerModule, private readonly options: CompilerOptions) {
-    this.compiler = mod.NodeCompiler.create({ workspace: options.root });
+/** Compiles in-process with typst.ts (WebAssembly). */
+class TypstTsBundleCompiler implements BundleCompiler {
+  readonly name = "typst.ts";
+  private compiler: Promise<TypstTsCompiler>;
+
+  constructor(mod: TypstTsModule, private readonly options: CompilerOptions) {
+    this.compiler = mod.createCompiler();
   }
 
   async bundle(): Promise<CompiledFile[] | undefined> {
-    const result = this.compiler.bundle!({ mainFilePath: this.options.entry });
-    const warnings = result.takeWarnings();
-    if (warnings) {
-      for (const d of this.compiler.fetchDiagnostics(warnings) as { message?: string; path?: string; range?: string }[]) {
-        if (!d.message || EXPERIMENTAL_WARNING.test(d.message)) continue;
-        const where = d.path ? `${d.path}${d.range ? `:${d.range}` : ""}: ` : "";
-        console.warn(`[blueprint] warning: ${where}${d.message}`);
-      }
+    const compiler = await this.compiler;
+    compiler.reset(); // re-read files edited since the last build
+    const result = compiler.bundle({ root: this.options.root, entry: this.options.entry });
+    let failed = false;
+    for (const d of result.diagnostics) {
+      if (d.severity !== "error" && EXPERIMENTAL_WARNING.test(d.message)) continue;
+      const line = d.range ? Number(d.range.split(":")[0]) + 1 : undefined;
+      const where = d.path ? `${d.path}${line ? `:${line}` : ""}: ` : "";
+      const log = d.severity === "error" ? console.error : console.warn;
+      if (d.severity === "error") failed = true;
+      log(`[blueprint] ${d.severity}: ${where}${d.message}`);
     }
-    if (result.hasError()) {
-      result.printErrors();
-      return undefined;
-    }
-    this.compiler.evictCache(30);
-    return result.result?.files();
+    if (result.hasError || failed) return undefined;
+    return result.files;
   }
 }
 

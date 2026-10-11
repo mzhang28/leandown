@@ -1,0 +1,8 @@
+@leandown/typst.ts
+
+This package contains a WebAssembly build of typst.ts
+(https://github.com/Myriad-Dreamin/typst.ts, Apache License 2.0), version
+v0.8.0-rc3, modified by the leandown authors: the patches in `patches/` add a
+bundle export (Typst's multi-file HTML output) to the web compiler.
+
+typst.ts embeds Typst (https://github.com/typst/typst, Apache License 2.0).

@@ -91,14 +91,14 @@ check names; set `"leanImports"` in `blueprint.json` to import something else.
 
 Blueprint compiles with one of:
 
-- **typst.ts** (default): leandown's build of the typst.ts Node compiler,
-  installed as an optional dependency. It runs in-process, so rebuilds take
-  milliseconds. Stock typst.ts releases can't compile bundles yet.
+- **typst.ts** (default): `@leandown/typst.ts`, a WebAssembly build of
+  typst.ts with bundle support, installed as an optional dependency. It runs
+  in-process on any platform, so rebuilds are fast.
 - **The `typst` CLI**, version 0.15 or later: `$TYPST`, `typst` on your
   `PATH`, or `"typstPath"` in blueprint.json.
 
-`"compiler": "auto"` (the default) uses typst.ts when it's installed and able
-to compile bundles, and otherwise the CLI. Set `"typst.ts"` or `"typst"` to
+`"compiler": "auto"` (the default) uses typst.ts when it's installed, and
+otherwise the CLI. Set `"typst.ts"` or `"typst"` to
 pick one; with `"typst"`, typst.ts is never loaded.
 
 ## Commands

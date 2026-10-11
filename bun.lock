@@ -65,7 +65,7 @@
         "typescript": "^5",
       },
       "optionalDependencies": {
-        "@myriaddreamin/typst-ts-node-compiler": "0.8.0-rc3",
+        "@leandown/typst.ts": "0.0.21",
       },
       "peerDependencies": {
         "typescript": "^5",
@@ -154,6 +154,10 @@
       "peerDependencies": {
         "typescript": "^5",
       },
+    },
+    "packages/typst.ts": {
+      "name": "@leandown/typst.ts",
+      "version": "0.0.21",
     },
     "packages/vscode": {
       "name": "@leandown/vscode",
@@ -565,6 +569,8 @@
 
     "@leandown/remark": ["@leandown/remark@workspace:packages/remark"],
 
+    "@leandown/typst.ts": ["@leandown/typst.ts@workspace:packages/typst.ts"],
+
     "@leandown/vscode": ["@leandown/vscode@workspace:packages/vscode"],
 
     "@libsql/client": ["@libsql/client@0.17.3", "", { "dependencies": { "@libsql/core": "^0.17.3", "@libsql/hrana-client": "^0.10.0", "js-base64": "^3.7.5", "libsql": "^0.5.28", "promise-limit": "^2.7.0" } }, "sha512-HXk9wiAoJbKFbyBH4O+aEhN6ir5ERXuXvwE5OD2eR4/5RUa3Pw/8L9zrnVdU+iNJitRvisPWaIwmhkO3bH7giA=="],
@@ -594,30 +600,6 @@
     "@libsql/win32-x64-msvc": ["@libsql/win32-x64-msvc@0.5.29", "", { "os": "win32", "cpu": "x64" }, "sha512-4/0CvEdhi6+KjMxMaVbFM2n2Z44escBRoEYpR+gZg64DdetzGnYm8mcNLcoySaDJZNaBd6wz5DNdgRmcI4hXcg=="],
 
     "@mdx-js/mdx": ["@mdx-js/mdx@3.1.1", "", { "dependencies": { "@types/estree": "^1.0.0", "@types/estree-jsx": "^1.0.0", "@types/hast": "^3.0.0", "@types/mdx": "^2.0.0", "acorn": "^8.0.0", "collapse-white-space": "^2.0.0", "devlop": "^1.0.0", "estree-util-is-identifier-name": "^3.0.0", "estree-util-scope": "^1.0.0", "estree-walker": "^3.0.0", "hast-util-to-jsx-runtime": "^2.0.0", "markdown-extensions": "^2.0.0", "recma-build-jsx": "^1.0.0", "recma-jsx": "^1.0.0", "recma-stringify": "^1.0.0", "rehype-recma": "^1.0.0", "remark-mdx": "^3.0.0", "remark-parse": "^11.0.0", "remark-rehype": "^11.0.0", "source-map": "^0.7.0", "unified": "^11.0.0", "unist-util-position-from-estree": "^2.0.0", "unist-util-stringify-position": "^4.0.0", "unist-util-visit": "^5.0.0", "vfile": "^6.0.0" } }, "sha512-f6ZO2ifpwAQIpzGWaBQT2TXxPv6z3RBzQKpVftEWN78Vl/YweF1uwussDx8ECAXVtr3Rs89fKyG9YlzUs9DyGQ=="],
-
-    "@myriaddreamin/typst-ts-node-compiler": ["@myriaddreamin/typst-ts-node-compiler@0.8.0-rc3", "", { "optionalDependencies": { "@myriaddreamin/typst-ts-node-compiler-android-arm-eabi": "0.8.0-rc3", "@myriaddreamin/typst-ts-node-compiler-android-arm64": "0.8.0-rc3", "@myriaddreamin/typst-ts-node-compiler-darwin-arm64": "0.8.0-rc3", "@myriaddreamin/typst-ts-node-compiler-darwin-x64": "0.8.0-rc3", "@myriaddreamin/typst-ts-node-compiler-linux-arm-gnueabihf": "0.8.0-rc3", "@myriaddreamin/typst-ts-node-compiler-linux-arm64-gnu": "0.8.0-rc3", "@myriaddreamin/typst-ts-node-compiler-linux-arm64-musl": "0.8.0-rc3", "@myriaddreamin/typst-ts-node-compiler-linux-x64-gnu": "0.8.0-rc3", "@myriaddreamin/typst-ts-node-compiler-linux-x64-musl": "0.8.0-rc3", "@myriaddreamin/typst-ts-node-compiler-win32-arm64-msvc": "0.8.0-rc3", "@myriaddreamin/typst-ts-node-compiler-win32-x64-msvc": "0.8.0-rc3" } }, "sha512-UV/LynOjsoXvbPigusm7IGusu22cENI5UDGdMFWK6B6E0F74r9S+TnY/TAGN3S6PvJvpgMTo9Y/MvmqDlgzB8w=="],
-
-    "@myriaddreamin/typst-ts-node-compiler-android-arm-eabi": ["@myriaddreamin/typst-ts-node-compiler-android-arm-eabi@0.8.0-rc3", "", { "os": "android", "cpu": "arm" }, "sha512-HNqXX1Pyt4BI7WetnrcCX+Yfz+K0L9I/Eklhko22+XSVz+OchPD4To8E2dOkIV1H3lC302OrnAoNcXWZpQc9Pw=="],
-
-    "@myriaddreamin/typst-ts-node-compiler-android-arm64": ["@myriaddreamin/typst-ts-node-compiler-android-arm64@0.8.0-rc3", "", { "os": "android", "cpu": "arm64" }, "sha512-PS1jRRGWxZ6Fuv8BgppgENdpQX1AfZaBwQq+81onkE53CoDpMTuD41UFjqdKrOos/BnCjrie/jjBWRVCt4NNNg=="],
-
-    "@myriaddreamin/typst-ts-node-compiler-darwin-arm64": ["@myriaddreamin/typst-ts-node-compiler-darwin-arm64@0.8.0-rc3", "", { "os": "darwin", "cpu": "arm64" }, "sha512-PmJ11x/pYvg2pF8y3wVV92Tk3fjiGdxWk2sXuUXcwsebH4wr3UDb2bsPyVUE6deNJ6SrUafglKm1nnXf4QMe8w=="],
-
-    "@myriaddreamin/typst-ts-node-compiler-darwin-x64": ["@myriaddreamin/typst-ts-node-compiler-darwin-x64@0.8.0-rc3", "", { "os": "darwin", "cpu": "x64" }, "sha512-DoYzkayAnad/x5I5eXW8YTkZVTpthzMKn1HtbwSFP87QCEecFFQFgSKGYpSfWPedNAc8ZMnTzk1XsuuE7s6SUA=="],
-
-    "@myriaddreamin/typst-ts-node-compiler-linux-arm-gnueabihf": ["@myriaddreamin/typst-ts-node-compiler-linux-arm-gnueabihf@0.8.0-rc3", "", { "os": "linux", "cpu": "arm" }, "sha512-6mNiQ5S+pTAJA6xiHtMMYjJWBa+YnpnawK2To3Y9UpzNkhgIipi1Nd0m+E6lQsqFFwjlYR/0EPlgcpQQOzP+Fg=="],
-
-    "@myriaddreamin/typst-ts-node-compiler-linux-arm64-gnu": ["@myriaddreamin/typst-ts-node-compiler-linux-arm64-gnu@0.8.0-rc3", "", { "os": "linux", "cpu": "arm64" }, "sha512-+c8a+W+mcLH6SGFh99HKiiNUEIQB7pZ3CyyFsl94IIuq+MqOAI9uEYPzauKsIsbDc9ZsWC9rie2wSYQHLvmNSg=="],
-
-    "@myriaddreamin/typst-ts-node-compiler-linux-arm64-musl": ["@myriaddreamin/typst-ts-node-compiler-linux-arm64-musl@0.8.0-rc3", "", { "os": "linux", "cpu": "arm64" }, "sha512-bEYNf4eiyJqOo1AO/WRacRoXiKvJ60KHb3zItETR50GwV9bck+rhSwzLfWO9VsckKMPdWeovSVLcHkl9IHvMJA=="],
-
-    "@myriaddreamin/typst-ts-node-compiler-linux-x64-gnu": ["@myriaddreamin/typst-ts-node-compiler-linux-x64-gnu@0.8.0-rc3", "", { "os": "linux", "cpu": "x64" }, "sha512-bqqb2NCCytrrI4GD6LST7FIM3jsyBPRqZ9LtPFi7IGLEHPokWN1PkuZtbwJ4mxb3/eD7ovd5G6Qyv2WDqesW2Q=="],
-
-    "@myriaddreamin/typst-ts-node-compiler-linux-x64-musl": ["@myriaddreamin/typst-ts-node-compiler-linux-x64-musl@0.8.0-rc3", "", { "os": "linux", "cpu": "x64" }, "sha512-uqjicMMq+ePQxsmjwQyGXYv7WK6DvGMfCSKzuv1jHLVFxD8BQFJ5UXWgMaOopCdRkFL1SdUzzipGaeo/8GQkpw=="],
-
-    "@myriaddreamin/typst-ts-node-compiler-win32-arm64-msvc": ["@myriaddreamin/typst-ts-node-compiler-win32-arm64-msvc@0.8.0-rc3", "", { "os": "win32", "cpu": "arm64" }, "sha512-O2pAiIAKMMV+lRGSE1a+EqCJUWc+Gfi4zyo9OXTXeCnpzICp4P4vIUrjU6R784gJjuG+p4tQP+n3PRw81mkbIA=="],
-
-    "@myriaddreamin/typst-ts-node-compiler-win32-x64-msvc": ["@myriaddreamin/typst-ts-node-compiler-win32-x64-msvc@0.8.0-rc3", "", { "os": "win32", "cpu": "x64" }, "sha512-G/uP+tlOZLx0OXXO4CEqo2D/ewHc8uBqmGD5p6f+LX3SBbRSqB6CosDS7PCfh2tehfdC7HNXyLtey9s2g4Xg9w=="],
 
     "@napi-rs/wasm-runtime": ["@napi-rs/wasm-runtime@0.2.4", "", { "dependencies": { "@emnapi/core": "^1.1.0", "@emnapi/runtime": "^1.1.0", "@tybys/wasm-util": "^0.9.0" } }, "sha512-9zESzOO5aDByvhIAsOy9TbpZ0Ur2AJbUI7UT73kcUTS2mxAMHOBaa1st/jAymNoCtvrit99kkzT1FZuXVcgfIQ=="],
 

@@ -1,0 +1,201 @@
+From 49bed797926957f24de512721bd12eadcd4ed9f8 Mon Sep 17 00:00:00 2001
+From: Michael Zhang <mail@mzhang.io>
+Date: Sun, 11 Oct 2026 17:51:42 -0400
+Subject: [PATCH] feat(compiler): expose bundle export in the node compiler
+
+Adds NodeCompiler.bundle(), which compiles the project for Typst's bundle
+target (multiple documents and assets from one project, via `document`
+and `asset`) and returns the exported files.
+
+Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>
+---
+ Cargo.lock                               |  2 ++
+ Cargo.toml                               |  1 +
+ packages/typst.node/Cargo.toml           |  5 ++-
+ packages/typst.node/src/compiler/node.rs | 46 +++++++++++++++++++++++-
+ packages/typst.node/src/error.rs         |  3 +-
+ packages/typst.node/src/lib.rs           | 37 +++++++++++++++++++
+ 6 files changed, 91 insertions(+), 3 deletions(-)
+
+diff --git a/Cargo.lock b/Cargo.lock
+index fc8a320..97a2843 100644
+--- a/Cargo.lock
++++ b/Cargo.lock
+@@ -5712,6 +5712,8 @@ dependencies = [
+  "serde_json",
+  "tinymist-project",
+  "tokio",
++ "typst",
++ "typst-bundle",
+  "typst-svg",
+  "typst-ts-cli",
+ ]
+diff --git a/Cargo.toml b/Cargo.toml
+index a92fe78..def4f8b 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -75,6 +75,7 @@ typst-render = "0.15.0"
+ typst-svg = "0.15.0"
+ typst-syntax = "0.15.0"
+ typst-html = "0.15.0"
++typst-bundle = "0.15.0"
+ 
+ ttf-parser = "0.25.0"
+ skrifa = "0.42.1"
+diff --git a/packages/typst.node/Cargo.toml b/packages/typst.node/Cargo.toml
+index 006834d..f0d23c6 100644
+--- a/packages/typst.node/Cargo.toml
++++ b/packages/typst.node/Cargo.toml
+@@ -26,6 +26,8 @@ serde.workspace = true
+ serde_json.workspace = true
+ tinymist-project = { workspace = true, features = ["system", "lsp"] }
+ tokio.workspace = true
++typst.workspace = true
++typst-bundle = { workspace = true, optional = true }
+ typst-svg.workspace = true
+ typst-ts-cli.workspace = true
+ 
+@@ -38,7 +40,8 @@ pdf = ["reflexo-typst/pdf"]
+ svg = ["reflexo-vec2svg", "reflexo-vec2svg/experimental-ligature"]
+ html = ["reflexo-typst/html"]
+ hast = ["reflexo-typst/hast"]
+-default = ["pdf", "svg", "html", "hast"]
++bundle = ["html", "dep:typst-bundle"]
++default = ["pdf", "svg", "html", "hast", "bundle"]
+ 
+ [lints]
+ workspace = true
+diff --git a/packages/typst.node/src/compiler/node.rs b/packages/typst.node/src/compiler/node.rs
+index fdd5e8a..eecbb05 100644
+--- a/packages/typst.node/src/compiler/node.rs
++++ b/packages/typst.node/src/compiler/node.rs
+@@ -15,7 +15,7 @@ use tinymist_project::ImageOutput;
+ use crate::error::*;
+ use crate::{
+     create_universe, BoxedCompiler, Buffer, CompileArgs, CompileDocArgs, Either, Error,
+-    JsBoxedCompiler, NodeTypstDocument, QueryDocArgs, RenderPdfOpts, Result,
++    JsBoxedCompiler, NodeBundleOutput, NodeTypstDocument, QueryDocArgs, RenderPdfOpts, Result,
+ };
+ 
+ /// Either a compiled document or compile arguments.
+@@ -376,6 +376,50 @@ impl NodeCompiler {
+             });
+         ExecResultRepr::from_result(res).into()
+     }
++
++    /// Compiles the document as a bundle: several documents and assets from
++    /// one project, as declared with `document` and `asset`.
++    #[napi]
++    #[cfg(feature = "bundle")]
++    pub fn bundle(&mut self, opts: CompileDocArgs) -> NodeBundleExecResult {
++        let res = self.compile_bundle(opts);
++        ExecResultRepr::from_result(res).into()
++    }
++
++    #[cfg(feature = "bundle")]
++    fn compile_bundle(
++        &mut self,
++        opts: CompileDocArgs,
++    ) -> std::result::Result<ExecResultRepr<NodeBundleOutput>, NodeError> {
++        use reflexo_typst::typst::LazyHash;
++        use typst::{Feature, Features, Library, LibraryExt};
++        use typst_bundle::{Bundle, BundleOptions};
++
++        let graph = self.driver.assert_mut().computation(opts)?;
++
++        // The bundle target needs the html and bundle features in the library,
++        // which the shared world doesn't enable.
++        let mut world = graph.snap.world.clone();
++        let features: Features = [Feature::Html, Feature::Bundle].into_iter().collect();
++        let library = Library::builder()
++            .with_inputs(world.inputs().as_ref().deref().clone())
++            .with_features(features)
++            .build();
++        world.library = Arc::new(LazyHash::new(library));
++
++        let compiled: ExecResultRepr<Bundle> = typst::compile::<Bundle>(&world).into();
++        let res = compiled.and_then(|bundle| {
++            let fs = typst_bundle::export(&bundle, &BundleOptions::default())?;
++            let files = fs
++                .into_iter()
++                .map(|(path, bytes)| (path.get_without_slash().to_owned(), bytes))
++                .collect();
++            Ok(NodeBundleOutput {
++                files: Arc::new(files),
++            })
++        });
++        Ok(res.with_graph(graph))
++    }
+ }
+ 
+ #[napi]
+diff --git a/packages/typst.node/src/error.rs b/packages/typst.node/src/error.rs
+index 7bfcca1..037cb32 100644
+--- a/packages/typst.node/src/error.rs
++++ b/packages/typst.node/src/error.rs
+@@ -12,7 +12,7 @@ use reflexo_typst::typst::diag::{SourceResult, Warned};
+ use reflexo_typst::typst::prelude::*;
+ use reflexo_typst::{DiagnosticFormat, TypstPagedDocument, TypstWorld};
+ 
+-use crate::{NodeHtmlOutput, NodeTypstDocument};
++use crate::{NodeBundleOutput, NodeHtmlOutput, NodeTypstDocument};
+ 
+ /// The error status of a node error.
+ pub enum NodeErrorStatus {
+@@ -395,4 +395,5 @@ macro_rules! impl_exec_result {
+ }
+ 
+ impl_exec_result!(NodeHtmlOutputExecResult, NodeHtmlOutput);
++impl_exec_result!(NodeBundleExecResult, NodeBundleOutput);
+ impl_exec_result!(NodeTypstCompileResult, NodeTypstDocument);
+diff --git a/packages/typst.node/src/lib.rs b/packages/typst.node/src/lib.rs
+index a1c1f91..26392af 100644
+--- a/packages/typst.node/src/lib.rs
++++ b/packages/typst.node/src/lib.rs
+@@ -90,6 +90,43 @@ fn typst_datetime_to_unix_nanoseconds(datetime: TypstDatetime) -> Option<i64> {
+     datetime.and_utc().timestamp_nanos_opt()
+ }
+ 
++/// A file emitted by a bundle compilation.
++#[napi(object)]
++pub struct NodeBundleFile {
++    /// The path of the file within the bundle, without a leading slash.
++    pub path: String,
++    /// The file's content.
++    pub content: Buffer,
++}
++
++/// The files emitted by a bundle compilation.
++#[napi]
++#[derive(Clone)]
++pub struct NodeBundleOutput {
++    pub(crate) files: Arc<Vec<(String, reflexo_typst::Bytes)>>,
++}
++
++#[napi]
++impl NodeBundleOutput {
++    /// Gets the paths of the emitted files, in output order.
++    #[napi]
++    pub fn paths(&self) -> Vec<String> {
++        self.files.iter().map(|(path, _)| path.clone()).collect()
++    }
++
++    /// Gets the emitted files.
++    #[napi]
++    pub fn files(&self) -> Vec<NodeBundleFile> {
++        self.files
++            .iter()
++            .map(|(path, content)| NodeBundleFile {
++                path: path.clone(),
++                content: content.as_slice().into(),
++            })
++            .collect()
++    }
++}
++
+ /// A shared HTML output object.
+ #[napi]
+ #[derive(Clone)]
+-- 
+2.55.0
+

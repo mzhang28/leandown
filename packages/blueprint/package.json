@@ -52,6 +52,6 @@
     "remark-html": "^16.0.1"
   },
   "optionalDependencies": {
-    "@myriaddreamin/typst-ts-node-compiler": "0.8.0-rc3"
+    "@leandown/typst.ts": "0.0.21"
   }
 }

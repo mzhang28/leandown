@@ -7,10 +7,11 @@
   "scripts": {
     "test:e2e": "playwright test --config tests/playwright.config.ts",
     "build": "for p in core remark markdown-it comark blueprint mdbook; do bun run --cwd \"packages/$p\" build || exit 1; done",
-    "lint:packages": "for p in core remark markdown-it comark blueprint; do (cd packages/$p && publint --strict) || exit 1; done",
-    "pack": "for p in core remark markdown-it comark blueprint mdbook; do (cd packages/$p && bun pm pack --destination ../../packs --quiet) || exit 1; done",
+    "lint:packages": "for p in typst.ts core remark markdown-it comark blueprint; do (cd packages/$p && publint --strict) || exit 1; done",
+    "pack": "for p in typst.ts core remark markdown-it comark blueprint mdbook; do (cd packages/$p && bun pm pack --destination ../../packs --quiet) || exit 1; done",
     "release:version": "nx release version",
-    "release:publish": "nx release publish"
+    "release:publish": "nx release publish",
+    "build:typst": "bun run --cwd packages/typst.ts build"
   },
   "devDependencies": {
     "@nx/js": "23.3.0",

@@ -1,0 +1,120 @@
+From b1f34d28bca813dce5e68a0a5e5e8ecc6484e9c5 Mon Sep 17 00:00:00 2001
+From: Michael Zhang <mail@mzhang.io>
+Date: Sun, 11 Oct 2026 19:28:47 -0400
+Subject: [PATCH] feat(compiler): expose bundle export in the web compiler
+
+Adds TypstCompiler.bundle(), which compiles the project for Typst's bundle
+target and returns the exported files with diagnostics. Behind the
+`bundle` feature.
+
+Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>
+---
+ Cargo.lock                   |  1 +
+ packages/compiler/Cargo.toml |  2 ++
+ packages/compiler/src/lib.rs | 58 ++++++++++++++++++++++++++++++++++++
+ 3 files changed, 61 insertions(+)
+
+diff --git a/Cargo.lock b/Cargo.lock
+index 97a2843..cdd4d34 100644
+--- a/Cargo.lock
++++ b/Cargo.lock
+@@ -5814,6 +5814,7 @@ dependencies = [
+  "sha2",
+  "typst",
+  "typst-assets",
++ "typst-bundle",
+  "typst-ts-test-common",
+  "wasm-bindgen",
+  "wasm-bindgen-futures",
+diff --git a/packages/compiler/Cargo.toml b/packages/compiler/Cargo.toml
+index d26e794..22c8289 100644
+--- a/packages/compiler/Cargo.toml
++++ b/packages/compiler/Cargo.toml
+@@ -41,6 +41,7 @@ reflexo-typst = { workspace = true, features = ["web"] }
+ reflexo-vec2svg.workspace = true
+ typst.workspace = true
+ typst-assets = { workspace = true, optional = true }
++typst-bundle = { workspace = true, optional = true }
+ 
+ [dev-dependencies]
+ wasm-bindgen-test.workspace = true
+@@ -52,6 +53,7 @@ web-sys = { workspace = true, features = ["console"] }
+ [features]
+ full = ["web", "web_test", "fonts", "misc"]
+ misc = ["incr", "svg", "pdf", "ast", "semantic_tokens"]
++bundle = ["dep:typst-bundle"]
+ 
+ web = ["reflexo-typst/web"]
+ web_test = ["typst-ts-test-common/web_artifacts"]
+diff --git a/packages/compiler/src/lib.rs b/packages/compiler/src/lib.rs
+index a672ab1..2d24c9f 100644
+--- a/packages/compiler/src/lib.rs
++++ b/packages/compiler/src/lib.rs
+@@ -358,6 +358,64 @@ impl TypstCompiler {
+         w.query(0, selector, field)
+     }
+ 
++    /// Compiles the project for Typst's bundle target: several documents and
++    /// assets from one project, as declared with `document` and `asset`.
++    ///
++    /// Returns `{ files, hasError, diagnostics }`, where `files` is an array of
++    /// `{ path, content }` (`content` a `Uint8Array`) when compilation succeeds.
++    #[cfg(feature = "bundle")]
++    pub fn bundle(
++        &mut self,
++        root: Option<String>,
++        main_file_path: String,
++        inputs: Option<Vec<js_sys::Array>>,
++        diagnostics_format: u8,
++    ) -> Result<JsValue, JsValue> {
++        use ::typst::{Feature, Features, Library, LibraryExt};
++        use std::ops::Deref;
++        use typst_bundle::{Bundle, BundleOptions};
++
++        let w = self.snapshot(root, Some(main_file_path), inputs)?;
++
++        // The bundle target needs the html and bundle features in the library,
++        // which the shared world doesn't enable.
++        let mut world = w.graph.snap.world.clone();
++        let features: Features = [Feature::Html, Feature::Bundle].into_iter().collect();
++        let library = Library::builder()
++            .with_inputs(world.inputs().as_ref().deref().clone())
++            .with_features(features)
++            .build();
++        world.library = Arc::new(LazyHash::new(library));
++
++        let Warned { output, warnings } = ::typst::compile::<Bundle>(&world);
++        let exported = output.and_then(|bundle| typst_bundle::export(&bundle, &BundleOptions::default()));
++
++        match exported {
++            Ok(fs) => {
++                let res = convert_diag(warnings.iter(), Some(&world), false, diagnostics_format);
++                let files = Array::new();
++                for (path, bytes) in fs {
++                    let file = js_sys::Object::new();
++                    js_sys::Reflect::set(&file, &"path".into(), &path.get_without_slash().into())?;
++                    js_sys::Reflect::set(
++                        &file,
++                        &"content".into(),
++                        &Uint8Array::from(bytes.as_slice()).into(),
++                    )?;
++                    files.push(&file);
++                }
++                js_sys::Reflect::set(&res, &"files".into(), &files.into())?;
++                Ok(res)
++            }
++            Err(errors) => Ok(convert_diag(
++                warnings.iter().chain(errors.iter()),
++                Some(&world),
++                true,
++                diagnostics_format,
++            )),
++        }
++    }
++
+     #[cfg(feature = "incr")]
+     pub fn create_incr_server(&mut self) -> Result<IncrServer, JsValue> {
+         Ok(IncrServer::default())
+-- 
+2.55.0
+

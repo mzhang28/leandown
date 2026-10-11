@@ -38,6 +38,11 @@ jobs:
       - name: Build all publishable packages
         run: bun run build
 
+      # Upstream typst.ts plus patches/, compiled to WebAssembly (~6 min).
+      # rustup on the runner installs the toolchain the checkout pins.
+      - name: Build @leandown/typst.ts
+        run: bun run build:typst
+
       - name: Lint packed packages
         run: bun run lint:packages
 

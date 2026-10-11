@@ -11,6 +11,7 @@
   },
   "release": {
     "projects": [
+      "@leandown/typst.ts",
       "@leandown/core",
       "@leandown/remark",
       "@leandown/markdown-it",

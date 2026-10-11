@@ -12,6 +12,17 @@ against built output: rebuild (or run a package's `tsc -b --watch`) after
 changing a dependency. Editors don't need a build; TypeScript project
 references point them at sibling packages' sources.
 
+## @leandown/typst.ts
+
+`packages/typst.ts` is a WebAssembly build of upstream typst.ts with the
+patches in `packages/typst.ts/patches/` (bundle export for the compiler).
+`bun run build:typst` checks out upstream into `3rd-party/typst.ts`, applies
+the patches and builds `wasm/` with wasm-pack; it needs rustup and takes a
+few minutes. The root `bun run build` skips it.
+
+To change the patch, commit in `3rd-party/typst.ts` and re-export with
+`git format-patch` into `packages/typst.ts/patches/`.
+
 ## Releasing
 
 All published packages share one version (Nx Release, fixed mode). Bumping

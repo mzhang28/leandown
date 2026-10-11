@@ -1,0 +1,31 @@
+{
+  "name": "@leandown/typst.ts",
+  "version": "0.0.21",
+  "description": "A WebAssembly build of typst.ts that compiles Typst projects to multi-page HTML (Typst's bundle target), for Node",
+  "repository": {
+    "url": "https://github.com/mzhang28/leandown"
+  },
+  "license": "Apache-2.0",
+  "type": "commonjs",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "default": "./index.js"
+    }
+  },
+  "files": [
+    "index.js",
+    "index.d.ts",
+    "wasm/typst_ts_web_compiler.js",
+    "wasm/typst_ts_web_compiler_bg.wasm",
+    "wasm/typst_ts_web_compiler.d.ts",
+    "LICENSE",
+    "NOTICE"
+  ],
+  "scripts": {
+    "build": "bash scripts/build.sh",
+    "prepack": "test -f wasm/typst_ts_web_compiler_bg.wasm || bash scripts/build.sh"
+  }
+}
