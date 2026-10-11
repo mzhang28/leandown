@@ -229,10 +229,10 @@ export function blueprintVitePlugin(
           ],
         },
         optimizeDeps: {
-          exclude: [SUMMARY_MODULE, GRAPH_MODULE],
-          // `@leandown/blueprint/app` ships as raw TSX, which Vite's dep
-          // scanner doesn't crawl. Without this, its CommonJS deps reach
-          // the browser untransformed when installed from a registry.
+          // The app imports the virtual summary/graph modules, so it can't be
+          // pre-bundled itself. Its CommonJS deps must be, or they reach the
+          // browser untransformed when installed from a registry.
+          exclude: [SUMMARY_MODULE, GRAPH_MODULE, "@leandown/blueprint/app"],
           include: [
             "@leandown/blueprint > react",
             "@leandown/blueprint > react/jsx-runtime",

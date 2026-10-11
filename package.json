@@ -1,20 +1,27 @@
 {
-  "workspaces": ["packages/*", "examples/basic/markdown", "docs"],
+  "workspaces": [
+    "packages/*",
+    "examples/basic/markdown",
+    "docs"
+  ],
   "scripts": {
     "test:e2e": "playwright test --config tests/playwright.config.ts",
     "build": "for p in core remark markdown-it comark blueprint mdbook; do bun run --cwd \"packages/$p\" build || exit 1; done",
-    "verify-publish": "node scripts/verify-publish.mjs",
-    "release:dry": "node scripts/publish-packages.mjs --dry-run",
-    "pack-local": "node scripts/pack-local.mjs",
-    "release": "node scripts/publish-packages.mjs"
+    "lint:packages": "for p in core remark markdown-it comark blueprint; do (cd packages/$p && publint --strict) || exit 1; done",
+    "pack": "for p in core remark markdown-it comark blueprint mdbook; do (cd packages/$p && bun pm pack --destination ../../packs --quiet) || exit 1; done",
+    "release:version": "nx release version",
+    "release:publish": "nx release publish"
   },
   "devDependencies": {
+    "@nx/js": "23.3.0",
     "@playwright/test": "^1.60.0",
     "@stryker-mutator/core": "^9.6.1",
     "@stryker-mutator/typescript-checker": "^9.6.1",
     "@types/markdown-it": "^14.1.2",
     "@types/node": "^25.9.2",
     "markdown-it": "^14.0.0",
+    "nx": "23.3.0",
+    "publint": "0.3.25",
     "remark": "^15.0.1",
     "remark-html": "^16.0.1"
   }

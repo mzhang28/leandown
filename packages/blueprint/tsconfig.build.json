@@ -5,8 +5,26 @@
     "emitDeclarationOnly": true,
     "declaration": true,
     "declarationMap": true,
-    "outDir": "dist"
+    "outDir": "dist",
+    "composite": true,
+    "rootDir": "src"
   },
-  "include": ["src/**/*.ts"],
-  "exclude": ["node_modules", "dist", "src/template"]
+  "include": [
+    "src/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "src/template",
+    "src/**/*.test.ts",
+    "src/**/__fixtures__"
+  ],
+  "references": [
+    {
+      "path": "../core/tsconfig.build.json"
+    },
+    {
+      "path": "../remark/tsconfig.build.json"
+    }
+  ]
 }

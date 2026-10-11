@@ -53,3 +53,5 @@ reports/stryker-incremental.json
 
 3rd-party
 .claude/worktrees
+# Nx
+.nx/

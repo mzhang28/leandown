@@ -14,17 +14,20 @@
   "types": "dist/index.d.ts",
   "exports": {
     ".": {
-      "import": "./src/index.ts",
-      "types": "./dist/index.d.ts"
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
     },
     "./vite": {
-      "import": "./src/vite/index.ts",
-      "types": "./dist/vite/index.d.ts"
+      "types": "./dist/vite/index.d.ts",
+      "import": "./dist/vite/index.js"
     },
-    "./app": "./src/app/main.tsx",
+    "./app": {
+      "types": "./app.d.ts",
+      "import": "./dist/app/main.js"
+    },
     "./lean": {
-      "import": "./src/lean/analyzer.ts",
-      "types": "./dist/lean/analyzer.d.ts"
+      "types": "./dist/lean/analyzer.d.ts",
+      "import": "./dist/lean/analyzer.js"
     },
     "./summary": {
       "types": "./summary.d.ts"
@@ -33,47 +36,17 @@
       "types": "./graph.d.ts"
     },
     "./graph-renderer": {
-      "import": "./dist/vite/graph-renderer.js",
-      "types": "./graph-renderer.d.ts"
+      "types": "./graph-renderer.d.ts",
+      "import": "./dist/vite/graph-renderer.js"
     },
-    "./styles.css": "./src/styles.css"
-  },
-  "publishConfig": {
-    "exports": {
-      ".": {
-        "import": "./dist/index.js",
-        "types": "./dist/index.d.ts"
-      },
-      "./vite": {
-        "import": "./dist/vite/index.js",
-        "types": "./dist/vite/index.d.ts"
-      },
-      "./app": "./src/app/main.tsx",
-      "./lean": {
-        "import": "./dist/lean/analyzer.js",
-        "types": "./dist/lean/analyzer.d.ts"
-      },
-      "./summary": {
-        "types": "./summary.d.ts"
-      },
-      "./graph": {
-        "types": "./graph.d.ts"
-      },
-      "./graph-renderer": {
-        "import": "./dist/vite/graph-renderer.js",
-        "types": "./graph-renderer.d.ts"
-      },
-      "./styles.css": "./dist/styles.css"
-    }
+    "./styles.css": "./dist/styles.css"
   },
   "files": [
     "dist",
-    "src/app",
-    "src/template",
-    "src/styles.css",
     "summary.d.ts",
     "graph.d.ts",
-    "graph-renderer.d.ts"
+    "graph-renderer.d.ts",
+    "app.d.ts"
   ],
   "scripts": {
     "prepack": "bun run build",
@@ -81,7 +54,7 @@
     "build:js": "bun build src/index.ts src/vite/index.ts src/lean/analyzer.ts --outdir dist --format esm --target node --external vite --external unified --external remark --external remark-html --external @leandown/core --external @leandown/remark --external cmd-ts",
     "build:app": "NODE_ENV=production bun build src/app/main.tsx --outdir dist/app --format esm --target browser --jsx-runtime automatic --external react --external react-dom --external react-dom/client --external @tanstack/react-router --external @leandown/blueprint/summary --external @leandown/blueprint/graph --external @leandown/blueprint/graph-renderer --external @leandown/blueprint/styles.css --external @leandown/core/runtime",
     "build:browser": "bun build src/vite/graph-renderer.ts --outdir dist/vite --format esm --target browser",
-    "build:dts": "tsc -p tsconfig.build.json",
+    "build:dts": "tsc -b tsconfig.build.json",
     "build:templates": "rm -rf dist/template && cp -r src/template dist/template && cp src/styles.css dist/styles.css"
   },
   "devDependencies": {

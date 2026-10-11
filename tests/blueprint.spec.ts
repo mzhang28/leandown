@@ -45,7 +45,7 @@ function $(cmd: string, args: string[], opts: { cwd: string; timeoutMs?: number 
  *
  * Prerequisites
  * -------------
- * Run `node scripts/pack-local.mjs` before running these tests to ensure
+ * Run `bun run build && bun run pack` before running these tests to ensure
  * up-to-date tarballs exist in packs/.
  */
 
@@ -61,7 +61,9 @@ const INIT_CLI = path.join(
   "packages/blueprint/dist/index.js",
 );
 /** Version of the @leandown packages to install from tarballs. */
-const PACK_VERSION = "0.0.11";
+const PACK_VERSION = JSON.parse(
+  fs.readFileSync(path.join(MONOREPO_ROOT, "packages/core/package.json"), "utf-8"),
+).version;
 
 /**
  * Persistent project directory under test-results.
@@ -117,7 +119,7 @@ function packPath(pkg: string): string {
   if (!fs.existsSync(tgz)) {
     throw new Error(
       `Tarball not found: ${tgz}\n` +
-        `Run \`node scripts/pack-local.mjs\` to build packs first.`,
+        `Run \`bun run build && bun run pack\` to build packs first.`,
     );
   }
   return tgz;

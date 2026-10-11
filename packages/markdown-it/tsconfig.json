@@ -18,5 +18,9 @@
     "noUnusedLocals": false,
     "noUnusedParameters": false,
     "noPropertyAccessFromIndexSignature": false
-  }
+  },
+  // Lets the editor read sibling packages' sources without building them.
+  "references": [
+    { "path": "../core/tsconfig.build.json" }
+  ]
 }

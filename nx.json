@@ -1,0 +1,38 @@
+{
+  "$schema": "./node_modules/nx/schemas/nx-schema.json",
+  "neverConnectToCloud": true,
+  "analytics": false,
+  "targetDefaults": {
+    "nx-release-publish": {
+      "dependsOn": [
+        "build"
+      ]
+    }
+  },
+  "release": {
+    "projects": [
+      "@leandown/core",
+      "@leandown/remark",
+      "@leandown/markdown-it",
+      "@leandown/comark",
+      "@leandown/blueprint",
+      "@leandown/mdbook"
+    ],
+    "projectsRelationship": "fixed",
+    "releaseTag": {
+      "pattern": "{projectName}@{version}"
+    },
+    "version": {
+      "preserveLocalDependencyProtocols": false,
+      "git": {
+        "commit": true,
+        "commitMessage": "Release {version}",
+        "tag": true
+      }
+    },
+    "changelog": {
+      "workspaceChangelog": false,
+      "projectChangelogs": false
+    }
+  }
+}
