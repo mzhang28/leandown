@@ -300,6 +300,25 @@ export function deactivate() {
       }
     } catch (_) {}
   }
+  removeTempProject();
+}
+
+function removeTempProject() {
+  if (tempProjectPath === null) return;
+  const resolved = path.resolve(tempProjectPath);
+  tempProjectPath = null;
+  // Only ever delete a directory this session created via mkdtemp.
+  if (
+    path.dirname(resolved) === path.resolve(os.tmpdir()) &&
+    path.basename(resolved).startsWith("leandown-")
+  ) {
+    try {
+      console.log(`[LeanMarkdown] Deleting temp Lean project: ${resolved}`);
+      fs.rmSync(resolved, { recursive: true, force: true });
+    } catch (err) {
+      console.error(`[LeanMarkdown] Failed to delete temp Lean project at ${resolved}:`, err);
+    }
+  }
 }
 
 function findLeanProjectRoot(startDir: string): string | undefined {
@@ -429,12 +448,13 @@ let tempProjectPath: string | null = null;
 function getOrCreateTempProject(): string {
   if (tempProjectPath !== null) return tempProjectPath;
 
-  const dir = path.join(os.tmpdir(), "leandown-temp-project");
+  // A fresh private directory per session (mkdtemp creates it 0700 with a
+  // random suffix). A fixed shared path would let another local user plant a
+  // lakefile that `lake serve` then runs as us, and would let two windows
+  // delete each other's companions.
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "leandown-"));
   console.log(`[LeanMarkdown] Initializing empty temp Lean project workspace at: ${dir}`);
   try {
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
 
     let toolchain = "leanprover/lean4:stable";
     try {
@@ -450,18 +470,11 @@ function getOrCreateTempProject(): string {
       console.warn("[LeanMarkdown] Failed to run 'lean --version', defaulting to stable toolchain", err);
     }
 
-    const lakefilePath = path.join(dir, "lakefile.toml");
-    if (!fs.existsSync(lakefilePath)) {
-      fs.writeFileSync(
-        lakefilePath,
-        `name = "lean_highlight_scratch"\nversion = "0.1.0"\n`
-      );
-    }
-
-    const toolchainPath = path.join(dir, "lean-toolchain");
-    if (!fs.existsSync(toolchainPath)) {
-      fs.writeFileSync(toolchainPath, toolchain);
-    }
+    fs.writeFileSync(
+      path.join(dir, "lakefile.toml"),
+      `name = "lean_highlight_scratch"\nversion = "0.1.0"\n`
+    );
+    fs.writeFileSync(path.join(dir, "lean-toolchain"), toolchain);
 
     tempProjectPath = dir;
     console.log("[LeanMarkdown] Temp Lean project initialized successfully");
