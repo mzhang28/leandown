@@ -42,6 +42,10 @@ setups. **Low** means an edge case or a hardening item.
   on deactivate.
 - **X6** (cache hits still start Lean): fixed; servers now start lazily on the
   first cache miss. The rest of X6 is still open.
+- **Blueprint** (B1–B7, F1, F2, and most of B10/B11): fixed. A fresh
+  `init` → `npm install` → `build`/`serve` now works from packed tarballs,
+  including under `base: "/repo/"`. `blueprint build` exits once done. B8,
+  B9, B12 and the noted parts of B10/B11 are still open.
 
 ---
 
@@ -63,14 +67,14 @@ The most important problems, in order:
    literal text. **(verified)**
 5. ~~**The `TypstBackend` output never compiles** (C1). Nested `#raw("#raw(...)")`.
    **(verified)**~~ **Fixed** (`1d53575`)
-6. **The blueprint directive parser corrupts content** (B1, B2). `` $` `` /
+6. ~~**The blueprint directive parser corrupts content** (B1, B2). `` $` `` /
    `$$` in a body triggers `String.replace` substitution, and the scaffolded
    `index.md` hits this. Nested, unclosed and fenced directives are mangled.
-   **(verified)**
+   **(verified)**~~ **Fixed** (`a8893a8`)
 7. ~~**Release CI is broken** (P1). `bun.lock` is stale after the 0.0.20 bump,
    so `bun install --frozen-lockfile` fails. **(verified)**~~ **Fixed** (`6e67a85`)
-8. **`blueprint build` exits 1 on a fresh `init` project** (B3), because
-   `docsCommand` calls `process.exit` inside a `try`.
+8. ~~**`blueprint build` exits 1 on a fresh `init` project** (B3), because
+   `docsCommand` calls `process.exit` inside a `try`.~~ **Fixed** (`a8893a8`)
 9. ~~**The VS Code extension uses a predictable `/tmp` project** (V3). Another
    local user can plant a `lakefile.lean` that runs as you.~~ **Fixed** (`f1b8c32`)
 
@@ -297,7 +301,7 @@ the converted blocks no longer match `code`. They never enter
 
 ## `@leandown/blueprint`
 
-### B1. `String.replace` substitution corrupts directive bodies containing `$` `[High]` (verified)
+### ~~B1. `String.replace` substitution corrupts directive bodies containing `$` `[High]`~~ Fixed in `a8893a8` (verified)
 `packages/blueprint/src/plugin/index.ts:182`
 `result.replace(directive.fullMatch, html)` interprets `` $` ``, `$'`, `$&` and
 `$$` in `html`. Leandown's inline-math syntax `` $`…` `` is replaced with the
@@ -305,7 +309,7 @@ text that comes before the match. The scaffolded `src/template/index.md:7,11,21`
 hits this on a fresh `blueprint init`.
 **Fix:** `result.replace(directive.fullMatch, () => html)`, or splice by index.
 
-### B2. Close detection is broken for nested, unclosed or fenced directives `[Medium]` (verified)
+### ~~B2. Close detection is broken for nested, unclosed or fenced directives `[Medium]`~~ Fixed in `a8893a8` (verified)
 `packages/blueprint/src/plugin/index.ts:61-66`; `vite/blueprint-plugin.ts:16,43`
 `/^:::/m` treats any line starting with `:::` as the close, including the
 next opener.
@@ -318,7 +322,7 @@ next opener.
 **Fix:** a line-based parser that skips fences, counts depth, requires an
 exact `:::` close and warns on unclosed directives.
 
-### B3. `blueprint build` / `serve` die whenever `lake build :docs` fails `[High]`
+### ~~B3. `blueprint build` / `serve` die whenever `lake build :docs` fails `[High]`~~ Fixed in `a8893a8`
 `packages/blueprint/src/commands/build.ts:35-41`; `commands/docs.ts:24-46,103-107`; `commands/serve.ts:43-46`; `template/blueprint.json:3`
 `docsCommand` calls `process.exit(1)`, which neither `try/catch` nor
 `.catch()` can intercept. The template sets `leanProjectPath: "./lean"` but
@@ -328,13 +332,13 @@ missing lean directory kills the CLI before Vite starts.
 **Fix:** have `docsCommand` throw or return a status. `build` and `serve` should
 warn and continue.
 
-### B4. Scaffolded deps pin `^0.0.1`, which on 0.0.x matches only 0.0.1 `[High]`
+### ~~B4. Scaffolded deps pin `^0.0.1`, which on 0.0.x matches only 0.0.1 `[High]`~~ Fixed in `a8893a8`
 `packages/blueprint/src/commands/init.ts:124-125`
 For a 0.0.x version, caret means `>=0.0.1 <0.0.2`, so new projects install
 0.0.1 instead of 0.0.20 (different template and API).
 **Fix:** write `^${pkg.version}` using the CLI's own package.json.
 
-### B5. Router has no `basepath`, so sub-path deploys break `[High]`
+### ~~B5. Router has no `basepath`, so sub-path deploys break `[High]`~~ Fixed in `a8893a8`
 `packages/blueprint/src/app/router.tsx:30`; `components/Sidebar.tsx:25,40`
 With `base: "/repo/"` (a GitHub Pages project site):
 - `/repo/ch1` matches no route.
@@ -344,7 +348,7 @@ With `base: "/repo/"` (a GitHub Pages project site):
 **Fix:** `createRouter({ routeTree, basepath: import.meta.env.BASE_URL })`, and
 drop the manual `replace(BASE, "")`.
 
-### B6. No HTML escaping of labels or attributes `[Medium]` (verified)
+### ~~B6. No HTML escaping of labels or attributes `[Medium]`~~ Fixed in `a8893a8` (verified)
 The author is trusted, so this is a correctness issue, not a security one.
 `packages/blueprint/src/plugin/index.ts:96-157`
 An owner value containing an escaped quote, `(owner := "Jane \"JD\" Doe")`,
@@ -353,7 +357,7 @@ as `"a<b"` or `"f & g"` produce broken markup.
 **Fix:** unescape `\\.` in `parseInfo`, and pass every interpolated value
 through `escapeHtml`.
 
-### B7. Graph is stale in dev, and duplicate labels crash it `[Medium]`
+### ~~B7. Graph is stale in dev, and duplicate labels crash it `[Medium]`~~ Fixed in `a8893a8`
 `packages/blueprint/src/vite/blueprint-plugin.ts:51-54`, `:152-155`, `:291-295`
 - **Stale graph:** the graph module never calls `addWatchFile` and is never
   invalidated, so new directives or `uses` don't show on `/graph` until the
@@ -402,19 +406,20 @@ edge schema. Remove or disable the LSP phase.
 ### B10. Routing and page-loading edge cases `[Low]`
 - `vite/summary.ts:30`: `path.basename` route keys collide (`a/intro.md` and
   `b/intro.md`). A page named `graph.md` is shadowed by `/graph`.
-- `app/components/MarkdownPage.tsx:24`: unknown slugs silently show the first
-  page.
-- `app/components/MarkdownPage.tsx:36-38`: no cancellation and no `.catch`, so
+- ~~`app/components/MarkdownPage.tsx:24`: unknown slugs silently show the first
+  page.~~ Fixed in `a8893a8`
+- ~~`app/components/MarkdownPage.tsx:36-38`: no cancellation and no `.catch`, so
   a late response overwrites the current page and a failed import leaves a
-  blank page.
+  blank page.~~ Fixed in `a8893a8`
 
 ### B11. Config and output paths `[Low]`
-- `commands/build.ts:41`, `commands/serve.ts:46`, `vite/blueprint-plugin.ts:175`:
-  a `blueprint.json` parse error is silently ignored.
-- `util.ts:12` vs `vite/blueprint-plugin.ts:140`: `srcDir` is ignored, and
-  `"src"` is hard-coded.
-- `commands/build.ts:53`, `vite/blueprint-plugin.ts:249`: `dist` is
-  hard-coded, which overrides `build.outDir`.
+- ~~`commands/build.ts:41`, `commands/serve.ts:46`, `vite/blueprint-plugin.ts:175`:
+  a `blueprint.json` parse error is silently ignored.~~ Fixed in `a8893a8`
+- ~~`util.ts:12` vs `vite/blueprint-plugin.ts:140`: `srcDir` is ignored, and
+  `"src"` is hard-coded.~~ Fixed in `a8893a8` for the summary and graph; the
+  template's `import.meta.glob` is still relative to `src/main.tsx`.
+- ~~`commands/build.ts:53`, `vite/blueprint-plugin.ts:249`: `dist` is
+  hard-coded, which overrides `build.outDir`.~~ Fixed in `a8893a8`
 - `vite/blueprint-plugin.ts:245-252`: the whole doc-gen4 tree is copied
   synchronously on every build and every watch rebuild.
 - `vite/blueprint-plugin.ts:217-221`: `/docs` without a trailing slash serves
@@ -611,19 +616,19 @@ README using only `npm`.
 | Typst via `@leandown/core` (README) | Output compiles with typst 0.15.1. **The script never exits.** |
 | markdown-it | The installed package has no README (F4). |
 
-### F1. README's `blueprint init my-blueprint` is rejected `[High]` (verified)
+### ~~F1. README's `blueprint init my-blueprint` is rejected `[High]`~~ Fixed in `a8893a8` (verified)
 `packages/blueprint/README.md` (Quick Start) vs the CLI. `init` takes only
 `--dir`, so a positional argument gives `Unknown arguments` and the first
 command a new user runs fails.
 **Fix:** accept a positional directory, or correct the README.
 
-### B4 update: the `^0.0.1` pin makes install impossible `[High]` (verified)
+### ~~B4 update: the `^0.0.1` pin makes install impossible `[High]`~~ Fixed in `a8893a8` (verified)
 0.0.1 was never published (real npm has 0.0.15 and later), so `npm install` and
 `bun install` in a scaffolded project fail with `ETARGET` / "No version
 matching". No new project can be installed without editing `package.json` by
 hand.
 
-### F2. Blueprint dev server renders a blank page for registry installs `[High]` (verified)
+### ~~F2. Blueprint dev server renders a blank page for registry installs `[High]`~~ Fixed in `a8893a8` (verified)
 `packages/blueprint/package.json` (`"./app": "./src/app/main.tsx"`), `vite/blueprint-plugin.ts` (`optimizeDeps`)
 Vite does not pre-bundle the dependencies of the raw-TSX `@leandown/blueprint/app`,
 so CommonJS packages reach the browser untransformed. The browser reports
@@ -636,6 +641,8 @@ Vite optimises dependencies.
 to `@leandown/blueprint > react`, `… > react-dom/client`,
 `… > @tanstack/react-router`, `… > @leandown/core/runtime`, and
 `@leandown/blueprint/graph-renderer`. Ship the app pre-built as well (see P4).
+The `optimizeDeps.include` part is done; shipping the app pre-built is still
+open.
 
 ### F3. mdbook README config can't find the preprocessor `[Medium]` (verified)
 `packages/mdbook/README.md`. The README installs with `--save-dev`, but
@@ -674,7 +681,8 @@ installed through the `peerDependencies` of `@leandown/core` and
 - **Untested modules:**
   - core: `client.ts`, `processor.ts`, `cache.ts`, `runtime.ts`.
   - adapters: markdown-it, comark.
-  - blueprint: `plugin/index.ts` (the directive parser), `extractGraphData`,
+  - blueprint: ~~`plugin/index.ts` (the directive parser)~~ (tested in
+    `a8893a8`), `extractGraphData`,
     `parseSummary`, the docs middleware.
   - mdbook: `processMarkdown` / `main()`.
   - vscode: `extension.ts`.
@@ -691,9 +699,13 @@ installed through the `peerDependencies` of `@leandown/core` and
   - cache hits and invalidation (the cache lives in `test-results/` and is
     wiped every run)
   - process exit and shutdown
-  - nested or fenced directives, and `$` in directive bodies
+  - ~~nested or fenced directives, and `$` in directive bodies~~ (added in `a8893a8`)
   - same-line `@[blueprint]` and namespaces in the analyzer
   - non-root Vite `base`
+- **Blueprint e2e can't run as written:** `tests/blueprint.spec.ts:64` pins
+  `PACK_VERSION = "0.0.11"`, and `scripts/pack-local.mjs` fails on the second
+  package because `pnpm pack` can't resolve `workspace:*` in a bun-installed
+  tree (`ERR_PNPM_CANNOT_RESOLVE_WORKSPACE_PROTOCOL`).
 - **Weak e2e assertions:**
   - `tests/lean.spec.ts:412`: `/(2|…)/` matches any tooltip containing "2".
   - `:455`: reads only the first block's registry, but hover ids restart at
