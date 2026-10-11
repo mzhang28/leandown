@@ -75,7 +75,7 @@ theorem add_zero_right (n : Nat) : n + 0 = n := by
 - `(uses := "label1, label2")` — declare dependencies on other nodes
 - `(owner := "name")` — assign an owner
 - `(priority := "high")` — set priority
-- `(mathlib)` — already in mathlib; counts as stated and proved
+- `(mathlib)` — already in mathlib; counts as stated and fully proved
 
 Lean names in `lean :=` must be fully qualified (`Ns.foo`, not `foo`).
 
@@ -85,11 +85,23 @@ Lean names in `lean :=` must be fully qualified (`Ns.foo`, not `foo`).
 `leanProjectPath` points at a Lean project, each node is coloured by
 leanblueprint's status model, checked against Lean itself:
 
-- **Stated** — every `lean :=` declaration exists.
-- **Proved** — stated, and `#print axioms` shows no `sorryAx` for any of
-  them (so no `sorry` anywhere in their dependency closure).
-- **Fully proved** — proved, and every dependency is fully proved.
-- **Ready to state / Ready to prove** — every dependency is stated / proved.
+- Border (statement): **Stated** when every `lean :=` declaration exists;
+  otherwise **Ready to state** if every dependency is stated, else **Not
+  ready**.
+- Fill (proof), for stated nodes:
+  - **Fully proved**: no `sorry` anywhere below it, and every dependency is
+    fully proved.
+  - **Proved**: no `sorry` anywhere below it, but some dependency isn't fully
+    proved yet.
+  - **Proved, sorry below**: its own proof is done, but something it uses in
+    Lean still has `sorry`.
+  - **Ready to prove**: its proof has `sorry`, and every dependency's proof is
+    done.
+  - **In progress**: its proof has `sorry`, and some dependency's proof isn't
+    done yet.
+
+"Its own proof" includes auxiliary declarations Lean splits off from it
+(like `foo.proof_1`), so a `sorry` inside a `have` counts.
 
 To check names, blueprint imports the root module of every `lean_lib` in your
 lakefile. Set `"leanImports": ["MyLib.Foo", …]` in `blueprint.json` to import

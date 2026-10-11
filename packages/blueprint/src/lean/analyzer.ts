@@ -18,6 +18,57 @@ const DEFAULT_TIMEOUT_MS = 10 * 60_000;
 /** A Lean name we're willing to splice into a command: no whitespace or comments. */
 const DECL_NAME_RE = /^[^\s()\[\]{},;"`]+$/;
 
+/** Prefix of the info message `#blueprint_status` logs for each name. */
+const STATUS_TAG = "blueprint-status ";
+
+/**
+ * Lean source for `#blueprint_status <name>`, which logs whether the name
+ * exists, whether its own definition uses `sorry` (including auxiliary
+ * declarations Lean split off from it, like `foo.proof_1`), and whether
+ * `sorry` appears anywhere in its dependency closure. Keep it ASCII: Bun
+ * escapes non-ASCII characters in template literals, which `String.raw`
+ * would then pass through to Lean verbatim.
+ */
+const STATUS_COMMAND = String.raw`
+open Lean in
+private def blueprintIsAux (root c : Name) : Bool :=
+  c != root && root.isPrefixOf c &&
+    (c.isInternal || match c with
+      | .str _ s => s.startsWith "proof_" || s.startsWith "match_" || s.startsWith "eq_"
+      | _ => false)
+
+open Lean in
+private def blueprintOwnSorry (env : Environment) (root : Name) : Bool := Id.run do
+  let mut todo := #[root]
+  let mut seen : NameSet := {}
+  while !todo.isEmpty do
+    let n := todo.back!
+    todo := todo.pop
+    if seen.contains n then continue
+    seen := seen.insert n
+    let some ci := env.find? n | continue
+    let value? := match ci with
+      | .thmInfo v => some v.value
+      | .defnInfo v => some v.value
+      | .opaqueInfo v => some v.value
+      | _ => none
+    for e in ci.type :: value?.toList do
+      if e.hasSorry then return true
+      for c in e.getUsedConstants do
+        if blueprintIsAux root c then todo := todo.push c
+  return false
+
+open Lean Elab Command in
+elab "#blueprint_status " id:ident : command => do
+  let n? <- try some <$> liftCoreM (realizeGlobalConstNoOverload id) catch _ => pure none
+  match n? with
+  | none => logInfo m!"${STATUS_TAG}{Json.compress (Json.mkObj [("exists", false)])}"
+  | some n =>
+    let axioms <- liftCoreM (collectAxioms n)
+    let own := blueprintOwnSorry (<- getEnv) n
+    logInfo m!"${STATUS_TAG}{Json.compress (Json.mkObj [("exists", true), ("ownSorry", own), ("usesSorry", axioms.contains ${"``"}sorryAx)])}"
+`;
+
 // ── Library roots ───────────────────────────────────────────────────────
 
 /**
@@ -62,13 +113,12 @@ export interface ProbeResult {
 }
 
 /**
- * Ask Lean whether each name exists and whether it depends on `sorry`.
+ * Ask Lean whether each name exists, whether its own definition uses
+ * `sorry`, and whether `sorry` appears anywhere it depends on.
  *
  * Elaborates one file that imports the project's library roots and runs
- * `#print axioms` on every name. Lean reports `sorryAx` for a declaration
- * that uses `sorry` anywhere in its dependency closure, so "no sorry" here
- * means proved all the way down. Throws if the imports fail (for example,
- * a module has errors) or Lean times out.
+ * `#blueprint_status` (see {@link STATUS_COMMAND}) on every name. Throws if
+ * the imports fail (for example, a module has errors) or Lean times out.
  */
 export async function probeDeclarations(
   names: Iterable<string>,
@@ -81,8 +131,11 @@ export async function probeDeclarations(
   if (valid.length === 0) return { facts, invalid };
 
   const imports = options.imports ?? libraryRoots(options.leanProjectPath);
-  const header = imports.map((m) => `import ${m}`);
-  const code = [...header, ...valid.map((n) => `#print axioms ${n}`)].join("\n") + "\n";
+  const header = [...imports, "Lean"].map((m) => `import ${m}`);
+  const preamble = STATUS_COMMAND.split("\n");
+  const first = header.length + preamble.length;
+  const code =
+    [...header, ...preamble, ...valid.map((n) => `#blueprint_status ${n}`)].join("\n") + "\n";
 
   const client = new LeanLSPClient(
     options.leanProjectPath,
@@ -118,12 +171,22 @@ export async function probeDeclarations(
     list.push(d);
     byLine.set(d.line, list);
   }
+  // An error in our own command means this Lean can't run it; say so
+  // rather than reporting every name as missing.
+  const commandError = result.diagnostics.find(
+    (d) => d.severity === 1 && d.line >= header.length && d.line < first
+  );
+  if (commandError) {
+    throw new Error(`Lean rejected the status command: ${commandError.message}`);
+  }
+
   valid.forEach((name, i) => {
-    const diags = byLine.get(header.length + i) ?? [];
-    const failed = diags.length === 0 || diags.some((d) => d.severity === 1);
+    const status = (byLine.get(first + i) ?? []).find((d) => d.message.startsWith(STATUS_TAG));
+    const parsed = status ? JSON.parse(status.message.slice(STATUS_TAG.length)) : {};
     facts.set(name, {
-      exists: !failed,
-      usesSorry: !failed && diags.some((d) => /\bsorryAx\b/.test(d.message)),
+      exists: parsed.exists === true,
+      ownSorry: parsed.ownSorry === true,
+      usesSorry: parsed.usesSorry === true,
     });
   });
   return { facts, invalid };
@@ -132,11 +195,12 @@ export async function probeDeclarations(
 // ── Status computation ──────────────────────────────────────────────────
 
 /**
- * Compute leanblueprint-style statement and proof states for every node.
+ * Compute statement and proof states for every node.
  *
  * A node is *stated* when it's marked `(mathlib)` or every linked Lean
- * declaration exists, and *proved* when it's stated, linked to Lean, and
- * none of its declarations depends on `sorry` (or it's marked `(mathlib)`).
+ * declaration exists. Its own proof is *done* when it's stated and none of
+ * its declarations uses `sorry` directly; `sorry` further down the
+ * dependency closure doesn't count against it, but is shown separately.
  * Dependencies on unknown labels are ignored. Nodes on a dependency cycle
  * are never fully proved; `onCycle` is called once per cycle found.
  */
@@ -151,16 +215,18 @@ export function computeStatuses(
 
   const stated = new Map<string, boolean>();
   const proved = new Map<string, boolean>();
+  const sorryFree = new Map<string, boolean>();
   for (const n of nodes) {
     const linked = n.leanDecls.length > 0;
-    const allExist = linked && n.leanDecls.every((d) => facts.get(d)?.exists);
-    const noSorry = n.leanDecls.every((d) => !facts.get(d)?.usesSorry);
+    const declFacts = n.leanDecls.map((d) => facts.get(d));
+    const allExist = linked && declFacts.every((f) => f?.exists);
     stated.set(n.label, !!n.mathlib || allExist);
-    proved.set(n.label, !!n.mathlib || (allExist && noSorry));
+    proved.set(n.label, !!n.mathlib || (allExist && declFacts.every((f) => !f!.ownSorry)));
+    sorryFree.set(n.label, !!n.mathlib || (allExist && declFacts.every((f) => !f!.usesSorry)));
   }
 
-  // Fully proved: proved, and every dependency fully proved. DFS with an
-  // on-stack marker so a cycle resolves to false instead of looping.
+  // Fully proved: sorry-free, and every dependency fully proved. DFS with
+  // an on-stack marker so a cycle resolves to false instead of looping.
   const fully = new Map<string, boolean>();
   const onStack: string[] = [];
   const visit = (n: StatusInput): boolean => {
@@ -172,7 +238,7 @@ export function computeStatuses(
       return false;
     }
     onStack.push(n.label);
-    let ok = proved.get(n.label)!;
+    let ok = sorryFree.get(n.label)!;
     for (const d of depsOf(n)) ok = visit(d) && ok;
     onStack.pop();
     fully.set(n.label, ok);
@@ -185,10 +251,12 @@ export function computeStatuses(
     const deps = depsOf(n);
     const isStated = stated.get(n.label)!;
     const isProved = proved.get(n.label)!;
+    const isSorryFree = sorryFree.get(n.label)!;
     const isFully = fully.get(n.label)!;
     const status: NodeStatus = {
       stated: isStated,
       proved: isProved,
+      sorryFree: isSorryFree,
       fullyProved: isFully,
       statement: n.mathlib
         ? "mathlib"
@@ -198,9 +266,13 @@ export function computeStatuses(
             ? "can_state"
             : "not_ready",
     };
-    if (isFully) status.proof = "fully_proved";
-    else if (isProved) status.proof = "proved";
-    else if (isStated && deps.every((d) => proved.get(d.label))) status.proof = "can_prove";
+    if (isStated) {
+      if (isFully) status.proof = "fully_proved";
+      else if (isProved && isSorryFree) status.proof = "proved";
+      else if (isProved) status.proof = "sorry_in_deps";
+      else if (deps.every((d) => proved.get(d.label))) status.proof = "can_prove";
+      else status.proof = "has_sorry";
+    }
     result.set(n.label, status);
   }
   return result;

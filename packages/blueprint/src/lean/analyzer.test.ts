@@ -9,7 +9,10 @@ const FIXTURES = path.join(import.meta.dirname, "__fixtures__", "test-project");
 
 function facts(entries: Record<string, Partial<DeclFacts>>): Map<string, DeclFacts> {
   return new Map(
-    Object.entries(entries).map(([k, v]) => [k, { exists: true, usesSorry: false, ...v }])
+    Object.entries(entries).map(([k, v]) => [
+      k,
+      { exists: true, ownSorry: false, usesSorry: !!v.ownSorry, ...v },
+    ])
   );
 }
 
@@ -18,16 +21,53 @@ function node(label: string, leanDecls: string[] = [], uses: string[] = [], math
 }
 
 describe("computeStatuses", () => {
-  test("proved leaf is fully proved", () => {
+  test("sorry-free leaf is fully proved", () => {
     const s = computeStatuses([node("a", ["A"])], facts({ A: {} })).get("a")!;
-    expect(s).toEqual({ stated: true, proved: true, fullyProved: true, statement: "stated", proof: "fully_proved" });
+    expect(s).toEqual({
+      stated: true, proved: true, sorryFree: true, fullyProved: true,
+      statement: "stated", proof: "fully_proved",
+    });
   });
 
-  test("sorry makes a node stated but not proved", () => {
-    const s = computeStatuses([node("a", ["A"])], facts({ A: { usesSorry: true } })).get("a")!;
+  test("own sorry with no dependencies is ready to prove", () => {
+    const s = computeStatuses([node("a", ["A"])], facts({ A: { ownSorry: true } })).get("a")!;
     expect(s.statement).toBe("stated");
     expect(s.proof).toBe("can_prove");
     expect(s.proved).toBe(false);
+  });
+
+  test("own sorry with an unfinished dependency has sorry", () => {
+    const st = computeStatuses(
+      [node("a", ["A"]), node("b", ["B"], ["a"])],
+      facts({ A: { ownSorry: true }, B: { ownSorry: true } })
+    );
+    expect(st.get("b")!.proof).toBe("has_sorry");
+  });
+
+  test("own proof done but sorry below it in Lean", () => {
+    const st = computeStatuses(
+      [node("a", ["A"]), node("b", ["B"], ["a"])],
+      facts({ A: { ownSorry: true }, B: { usesSorry: true } })
+    );
+    expect(st.get("b")!).toMatchObject({ proved: true, sorryFree: false, proof: "sorry_in_deps" });
+    expect(st.get("b")!.fullyProved).toBe(false);
+  });
+
+  test("a done-but-sorry-below dependency still unlocks can_prove", () => {
+    const st = computeStatuses(
+      [node("a", ["A"]), node("b", ["B"], ["a"])],
+      facts({ A: { usesSorry: true }, B: { ownSorry: true } })
+    );
+    expect(st.get("b")!.proof).toBe("can_prove");
+  });
+
+  test("sorry-free node with an unfinished blueprint dependency is proved, not fully", () => {
+    const st = computeStatuses(
+      [node("a", ["A"]), node("b", ["B"], ["a"])],
+      facts({ A: { ownSorry: true }, B: {} })
+    );
+    expect(st.get("b")!.proof).toBe("proved");
+    expect(st.get("b")!.fullyProved).toBe(false);
   });
 
   test("missing declaration is not stated", () => {
@@ -46,25 +86,6 @@ describe("computeStatuses", () => {
     expect(st.get("x")!.statement).toBe("can_state");
     expect(st.get("y")!.statement).toBe("not_ready");
     expect(st.get("x")!.proof).toBeUndefined();
-  });
-
-  test("can_prove needs every dependency proved", () => {
-    const f = facts({ A: {}, B: { usesSorry: true }, C: { usesSorry: true }, D: { usesSorry: true } });
-    const st = computeStatuses(
-      [node("a", ["A"]), node("b", ["B"]), node("c", ["C"], ["a"]), node("d", ["D"], ["b"])],
-      f
-    );
-    expect(st.get("c")!.proof).toBe("can_prove");
-    expect(st.get("d")!.proof).toBeUndefined();
-  });
-
-  test("proved node with an unproved dependency is proved, not fully", () => {
-    const st = computeStatuses(
-      [node("a", ["A"]), node("b", ["B"], ["a"])],
-      facts({ A: { usesSorry: true }, B: {} })
-    );
-    expect(st.get("b")!.proof).toBe("proved");
-    expect(st.get("b")!.fullyProved).toBe(false);
   });
 
   test("fully proved propagates through a chain", () => {
@@ -137,7 +158,7 @@ describe.skipIf(!lake)("probeDeclarations (real Lean)", () => {
     fs.rmSync(dir, { recursive: true, force: true });
   });
 
-  test("reports existence and sorry, including namespaces and indirect sorry", async () => {
+  test("reports existence, own sorry and sorry below", async () => {
     const { facts, invalid } = await probeDeclarations(
       [
         "NatAdd",
@@ -146,20 +167,31 @@ describe.skipIf(!lake)("probeDeclarations (real Lean)", () => {
         "double_zero",
         "add_succ_right",
         "add_succ_twice",
+        "todoDef",
+        "partial_have",
+        "usesTodo",
+        "subtypeTodo",
         "Nat.add_zero",
         "bad name",
       ],
       { leanProjectPath: dir }
     );
     expect(invalid).toEqual(["bad name"]);
+    const clean = { exists: true, ownSorry: false, usesSorry: false };
+    const own = { exists: true, ownSorry: true, usesSorry: true };
+    const below = { exists: true, ownSorry: false, usesSorry: true };
     expect(Object.fromEntries(facts)).toEqual({
-      NatAdd: { exists: true, usesSorry: false },
-      "Demo.double": { exists: true, usesSorry: false },
-      "Demo.double_zero": { exists: true, usesSorry: false },
-      double_zero: { exists: false, usesSorry: false },
-      add_succ_right: { exists: true, usesSorry: true },
-      add_succ_twice: { exists: true, usesSorry: true },
-      "Nat.add_zero": { exists: true, usesSorry: false },
+      NatAdd: clean,
+      "Demo.double": clean,
+      "Demo.double_zero": clean,
+      double_zero: { exists: false, ownSorry: false, usesSorry: false },
+      add_succ_right: own,
+      add_succ_twice: below,
+      todoDef: own,
+      partial_have: own,
+      usesTodo: below,
+      subtypeTodo: own,
+      "Nat.add_zero": clean,
     });
   }, 300_000);
 

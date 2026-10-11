@@ -7,10 +7,11 @@ export interface GraphNode {
   mathlib?: boolean;
   stated?: boolean;
   proved?: boolean;
+  sorryFree?: boolean;
   fullyProved?: boolean;
   /** Absent when Lean status isn't available. */
   statement?: "mathlib" | "stated" | "can_state" | "not_ready";
-  proof?: "fully_proved" | "proved" | "can_prove";
+  proof?: "fully_proved" | "proved" | "sorry_in_deps" | "can_prove" | "has_sorry";
 }
 
 export interface GraphEdge {

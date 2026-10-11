@@ -15,9 +15,11 @@ export interface GraphNode {
   mathlib?: boolean;
   /** Every linked Lean declaration exists (checked against Lean). */
   stated?: boolean;
-  /** Stated, and no linked declaration depends on `sorry`. */
+  /** Stated, and no linked declaration uses `sorry` directly. */
   proved?: boolean;
-  /** Proved, and every dependency is fully proved. */
+  /** No `sorry` anywhere below the linked declarations. */
+  sorryFree?: boolean;
+  /** Sorry-free, and every dependency is fully proved. */
   fullyProved?: boolean;
   /** Border colour. Absent when Lean status isn't available. */
   statement?: StatementState;
@@ -42,9 +44,11 @@ const STATEMENT_COLORS: Record<string, { color: string; label: string; desc: str
 
 /** Proof status → fill colour (lean-blueprint inspired). */
 const PROOF_COLORS: Record<string, { color: string; label: string; desc: string }> = {
-  fully_proved: { color: "#1CAC78", label: "Fully proved",  desc: "proof and all ancestors are formalized" },
-  proved:       { color: "#9CEC8B", label: "Proved",        desc: "proof is formalized" },
-  can_prove:    { color: "#A3D6FF", label: "Ready to prove", desc: "statement is formalized and all prerequisites are proved" },
+  fully_proved:  { color: "#1CAC78", label: "Fully proved",        desc: "no sorry anywhere below it, and every dependency is fully proved" },
+  proved:        { color: "#9CEC8B", label: "Proved",              desc: "no sorry anywhere below it; some dependency isn't fully proved yet" },
+  sorry_in_deps: { color: "#DCEFA0", label: "Proved, sorry below", desc: "its own proof is done; something it uses still has sorry" },
+  can_prove:     { color: "#A3D6FF", label: "Ready to prove",      desc: "its proof has sorry, and every dependency's proof is done" },
+  has_sorry:     { color: "#F5DDB0", label: "In progress",         desc: "its proof has sorry, and some dependency's proof isn't done yet" },
 };
 
 /** Kind → fallback colour (used when no state data is available). */
@@ -156,7 +160,7 @@ function renderLegend(container: HTMLElement, nodes: GraphNode[]): void {
     hdrFill.className = "graph-legend-section-title";
     hdrFill.textContent = "Proof status";
     secFill.appendChild(hdrFill);
-    for (const st of ["fully_proved", "proved", "can_prove"] as const) {
+    for (const st of ["fully_proved", "proved", "sorry_in_deps", "can_prove", "has_sorry"] as const) {
       const c = PROOF_COLORS[st]!;
       secFill.appendChild(legendItem(c.color, c.color, c.label, c.desc));
     }
