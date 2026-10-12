@@ -21,6 +21,16 @@ bun run dev                        # live preview
 bun run build                      # static site in dist/
 ```
 
+### In an existing Lean project
+
+Run `blueprint init` at the project root, or `blueprint init blueprint` for a
+subfolder. Init finds the `lakefile.toml` (or `lakefile.lean`) in that
+directory or above it and sets `leanProjectPath` to match. It keeps files that
+already exist, and adds to `.gitignore` and `package.json` instead of
+replacing them; a `dev` or `build` script that's taken becomes
+`blueprint:dev` / `blueprint:build`. `blueprint serve` also watches the Lean
+project when it's outside the blueprint folder.
+
 ## Writing a blueprint
 
 `main.typ` lists the chapters; each becomes a page:

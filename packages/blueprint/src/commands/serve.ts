@@ -62,14 +62,19 @@ export async function serveCommand(opts: ServeOptions = {}): Promise<void> {
 
   const outName = path.relative(root, outDir).split(path.sep)[0];
   let timer: ReturnType<typeof setTimeout> | undefined;
-  fs.watch(root, { recursive: true }, (_event, file) => {
-    if (!file) return;
-    const parts = file.split(path.sep);
-    if (parts.some((p) => IGNORED.has(p)) || parts[0] === outName) return;
-    if (!/\.(typ|lean|json|bib|png|svg|jpe?g)$/.test(file)) return;
-    clearTimeout(timer);
-    timer = setTimeout(() => void rebuild(), 150);
-  });
+  const watch = (dir: string, pattern: RegExp) =>
+    fs.watch(dir, { recursive: true }, (_event, file) => {
+      if (!file) return;
+      const parts = file.split(path.sep);
+      if (parts.some((p) => IGNORED.has(p)) || (dir === root && parts[0] === outName)) return;
+      if (!pattern.test(file)) return;
+      clearTimeout(timer);
+      timer = setTimeout(() => void rebuild(), 150);
+    });
+  watch(root, /\.(typ|lean|json|bib|png|svg|jpe?g)$/);
+  // A Lean project beside or above the blueprint isn't under `root`.
+  const lean = options.leanProjectPath;
+  if (lean && fs.existsSync(lean) && path.relative(root, lean).startsWith("..")) watch(lean, /\.lean$/);
 
   const stop = async () => {
     await server.close();
