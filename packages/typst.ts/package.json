@@ -1,6 +1,6 @@
 {
   "name": "@leandown/typst.ts",
-  "version": "0.0.21",
+  "version": "0.0.22",
   "description": "A WebAssembly build of typst.ts that compiles Typst projects to multi-page HTML (Typst's bundle target), for Node",
   "repository": {
     "url": "https://github.com/mzhang28/leandown"

@@ -44,7 +44,7 @@
     },
     "packages/blueprint": {
       "name": "@leandown/blueprint",
-      "version": "0.0.21",
+      "version": "0.0.22",
       "bin": {
         "blueprint": "./dist/index.js",
       },
@@ -73,7 +73,7 @@
     },
     "packages/comark": {
       "name": "@leandown/comark",
-      "version": "0.0.21",
+      "version": "0.0.22",
       "dependencies": {
         "@leandown/core": "workspace:*",
       },
@@ -88,7 +88,7 @@
     },
     "packages/core": {
       "name": "@leandown/core",
-      "version": "0.0.21",
+      "version": "0.0.22",
       "dependencies": {
         "@floating-ui/dom": "^1.7.6",
         "@libsql/client": "^0.17.3",
@@ -106,7 +106,7 @@
     },
     "packages/markdown-it": {
       "name": "@leandown/markdown-it",
-      "version": "0.0.21",
+      "version": "0.0.22",
       "dependencies": {
         "@leandown/core": "workspace:*",
       },
@@ -121,7 +121,7 @@
     },
     "packages/mdbook": {
       "name": "@leandown/mdbook",
-      "version": "0.0.21",
+      "version": "0.0.22",
       "bin": {
         "mdbook-leandown": "./dist/main.js",
       },
@@ -139,7 +139,7 @@
     },
     "packages/remark": {
       "name": "@leandown/remark",
-      "version": "0.0.21",
+      "version": "0.0.22",
       "dependencies": {
         "@leandown/core": "workspace:*",
         "remark": "^15.0.1",
@@ -157,7 +157,7 @@
     },
     "packages/typst.ts": {
       "name": "@leandown/typst.ts",
-      "version": "0.0.21",
+      "version": "0.0.22",
     },
     "packages/vscode": {
       "name": "@leandown/vscode",

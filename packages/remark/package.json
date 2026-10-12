@@ -1,6 +1,6 @@
 {
   "name": "@leandown/remark",
-  "version": "0.0.21",
+  "version": "0.0.22",
   "description": "remark plugin for syntax-highlighting Lean 4 code blocks via the Lean LSP",
   "repository": {
     "url": "https://github.com/mzhang28/leandown"
@@ -34,7 +34,7 @@
     "typescript": "^5"
   },
   "dependencies": {
-    "@leandown/core": "0.0.21",
+    "@leandown/core": "0.0.22",
     "remark": "^15.0.1",
     "remark-html": "^16.0.1"
   }
