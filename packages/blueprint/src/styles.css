@@ -391,6 +391,6 @@ html, body {
 /* ── Typst output ───────────────────────────────────────────────────────── */
 
 #content figure { margin: 0; }
-#content math[display="block"] { display: block; margin: 0.75rem 0; }
+#content math[display="block"] { display: block math; margin: 0.75rem 0; }
 .blueprint-node--proof .blueprint-kind { font-style: italic; text-transform: none; }
 .nav-graph .nav-list { margin: 0; }
