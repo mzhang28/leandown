@@ -3,7 +3,9 @@
   "version": "0.0.22",
   "description": "A WebAssembly build of typst.ts that compiles Typst projects to multi-page HTML (Typst's bundle target), for Node",
   "repository": {
-    "url": "https://github.com/mzhang28/leandown"
+    "type": "git",
+    "url": "git+https://github.com/mzhang28/leandown.git",
+    "directory": "packages/typst.ts"
   },
   "license": "Apache-2.0",
   "type": "commonjs",
@@ -27,5 +29,8 @@
   "scripts": {
     "build": "bash scripts/build.sh",
     "prepack": "test -f wasm/typst_ts_web_compiler_bg.wasm || bash scripts/build.sh"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

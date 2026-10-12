@@ -3,7 +3,9 @@
   "version": "0.0.22",
   "description": "Comark plugin for syntax-highlighting Lean 4 code blocks via the Lean LSP",
   "repository": {
-    "url": "https://github.com/mzhang28/leandown"
+    "type": "git",
+    "url": "git+https://github.com/mzhang28/leandown.git",
+    "directory": "packages/comark"
   },
   "main": "dist/index.js",
   "module": "dist/index.js",
@@ -34,5 +36,8 @@
   },
   "dependencies": {
     "@leandown/core": "0.0.22"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

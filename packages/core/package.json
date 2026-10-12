@@ -3,7 +3,9 @@
   "version": "0.0.22",
   "description": "Pluggable Lean 4 code highlighting via the Lean LSP",
   "repository": {
-    "url": "https://github.com/mzhang28/leandown"
+    "type": "git",
+    "url": "git+https://github.com/mzhang28/leandown.git",
+    "directory": "packages/core"
   },
   "main": "dist/index.js",
   "module": "dist/index.js",
@@ -46,5 +48,8 @@
     "@floating-ui/dom": "^1.7.6",
     "@libsql/client": "^0.17.3",
     "escape-html": "^1.0.3"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

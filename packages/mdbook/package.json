@@ -3,7 +3,9 @@
   "version": "0.0.22",
   "description": "mdbook plugin for syntax-highlighting Lean 4 code blocks via the Lean LSP",
   "repository": {
-    "url": "https://github.com/mzhang28/leandown"
+    "type": "git",
+    "url": "git+https://github.com/mzhang28/leandown.git",
+    "directory": "packages/mdbook"
   },
   "type": "module",
   "bin": {
@@ -26,5 +28,8 @@
     "@leandown/core": "0.0.22",
     "cmd-ts": "^0.15.0",
     "markdown-it": "^14.3.0"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

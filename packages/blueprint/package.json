@@ -3,7 +3,9 @@
   "version": "0.0.22",
   "description": "All-in-one CLI for Lean blueprint projects — Typst documents with Lean formalization tracking",
   "repository": {
-    "url": "https://github.com/mzhang28/leandown"
+    "type": "git",
+    "url": "git+https://github.com/mzhang28/leandown.git",
+    "directory": "packages/blueprint"
   },
   "type": "module",
   "bin": {
@@ -53,5 +55,8 @@
   },
   "optionalDependencies": {
     "@leandown/typst.ts": "0.0.22"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

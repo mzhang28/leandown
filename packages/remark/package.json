@@ -3,7 +3,9 @@
   "version": "0.0.22",
   "description": "remark plugin for syntax-highlighting Lean 4 code blocks via the Lean LSP",
   "repository": {
-    "url": "https://github.com/mzhang28/leandown"
+    "type": "git",
+    "url": "git+https://github.com/mzhang28/leandown.git",
+    "directory": "packages/remark"
   },
   "main": "dist/index.js",
   "module": "dist/index.js",
@@ -37,5 +39,8 @@
     "@leandown/core": "0.0.22",
     "remark": "^15.0.1",
     "remark-html": "^16.0.1"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }
